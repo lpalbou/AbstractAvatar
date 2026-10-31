@@ -609,6 +609,8 @@ fn vortex(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> S
     };
     let reach = if p == AvatarPose::Speaking {
         0.14 * speech(t) + 0.12 * level
+    } else if p == AvatarPose::Listening {
+        -0.12 * level
     } else {
         0.
     };
@@ -913,6 +915,22 @@ mod tests {
                 assert_eq!(
                     sample(style, AvatarPose::Ready, 0.0, 0.0, value, f32::NAN),
                     Sample::EMPTY
+                );
+            }
+        }
+    }
+    #[test]
+    fn every_voice_pose_responds_to_measured_level() {
+        for style in AvatarStyle::ALL {
+            for pose in [AvatarPose::Listening, AvatarPose::Speaking] {
+                let quiet = Frame::new(style, pose, 0.05, 1.25, Gaze::default());
+                let loud = Frame::new(style, pose, 0.9, 1.25, Gaze::default());
+                assert!(
+                    (0..64).any(|y| (0..64).any(|x| {
+                        let (x, y) = ((x as f32 - 32.0) / 32.0, (y as f32 - 32.0) / 32.0);
+                        quiet.sample(x, y) != loud.sample(x, y)
+                    })),
+                    "{style:?}/{pose:?} ignores voice level"
                 );
             }
         }
