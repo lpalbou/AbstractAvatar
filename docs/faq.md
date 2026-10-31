@@ -26,3 +26,11 @@ opt into an avatar source when they want one.
 
 No. The shared catalog and generator are reusable independently of client adoption. Watch and
 iPhone implementations remain separate until explicitly integrated. See [catalog](catalog.md).
+
+## Will every host reproduce the Apple colors and transitions exactly?
+
+The shared designs retain their own geometry and activity cues. Each host supplies three theme
+material ramps, so color follows those anchors rather than an independent hardcoded Apple
+palette. Version 1 requests independent frames and does not carry the Apple engine's accumulated
+transition state or audio history. Terminal cell modes also have less detail than an RGBA image.
+See [rendering](rendering.md) and [the frame contract](frame-contract.md).

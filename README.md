@@ -27,7 +27,7 @@ with Cargo. See [getting started](docs/getting-started.md) for library use and p
 
 ## Integrate a player
 
-- **Rust:** create a `Frame` and map its material samples through your theme.
+- **Rust:** create a `Frame` and sample composited RGBA through your theme's material ramps.
 - **Browser:** run the bundled WebAssembly generator and present RGBA pixels on Canvas.
 - **Python/native:** request RGBA pixels through the binding or the C interface and present them
   with your UI toolkit.

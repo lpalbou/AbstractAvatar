@@ -177,13 +177,13 @@ fn draw(
     );
     for y in 0..f.height {
         for x in 0..f.width {
-            let s = frame.sample(
+            let ink = frame.rgba(
                 (x as f32 + 0.5 - f.width as f32 * 0.5) / radius,
                 (y as f32 + 0.5 - f.height as f32 * 0.5) / radius,
+                (1.0 / radius).min(0.125),
+                &f.palette,
             );
-            let index = (s.light * 255.).round() as usize;
-            let ink = f.palette[s.material as usize][index].to_be_bytes();
-            let a = s.coverage * ink[3] as f32 / 255.;
+            let a = ink[3] as f32 / 255.;
             let offset = ((y * f.width + x) * 4) as usize;
             let dest_alpha = ground[3] as f32 / 255.0;
             let out_alpha = a + dest_alpha * (1.0 - a);

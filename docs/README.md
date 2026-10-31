@@ -4,6 +4,7 @@
 - [Architecture](architecture.md): shared generation and platform responsibilities.
 - [API](api.md): Rust, Python, C and browser integration entry points.
 - [Frame contract](frame-contract.md): descriptors, pixel layout, bounds and lifecycle.
+- [Rendering](rendering.md): layered light, shaded surfaces, antialiasing and host palettes.
 - [Catalog](catalog.md): styles, activity states and design provenance.
 - [FAQ](faq.md): formats, portability and integration choices.
 - [Troubleshooting](troubleshooting.md): setup, rendering and resource errors.

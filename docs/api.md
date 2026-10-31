@@ -20,7 +20,17 @@ specified by that object.
 
 `AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
 activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
-`Frame::sample(x, y)` returns material/light/coverage in centered coordinates, with y downward.
+`Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
+`Palette` is `[[u32; 256]; 3]`: Warm, Eye and Dim shade ramps packed as `0xRRGGBBAA`.
+Prepare these ramps once per theme. `pixel_size` is the full normalized pixel width, usually
+`2.0 / min(width, height)`, bounded to 0..0.125; zero requests an analytic point sample.
+Non-finite inputs, out-of-range pixel sizes and coordinates outside -1.5..1.5 return transparent
+black. Coordinates are centered, with y downward and one unit equal to the avatar radius.
+
+`Frame::sample(x, y)` remains available as a single material/light/coverage approximation.
+Use `rgba` to retain overlapping material colors, translucent ribbons and opaque shaded surfaces.
+The native, Python and WebAssembly renderers use this same compositing path. See
+[rendering](rendering.md) for antialiasing, palette behavior and scheduling boundaries.
 
 The `ffi` feature supplies the native C/WebAssembly adapter. Geometry remains usable without a
 UI toolkit. The optional descriptor feature parses the versioned parameter object.

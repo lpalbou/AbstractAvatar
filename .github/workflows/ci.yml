@@ -36,4 +36,5 @@ jobs:
           components: clippy
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-features --all-targets -- -D warnings
-      - run: cargo build --locked --release --features ffi --target wasm32-unknown-unknown
+      - run: python scripts/build_artifacts.py
+      - run: python scripts/check_portability.py --native artifacts/libabstractavatar.so

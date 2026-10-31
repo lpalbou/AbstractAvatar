@@ -1,6 +1,7 @@
 //! Procedural Apple scene vocabulary, expressed as bounded material-space strokes.
 //! References are the read-only Orb*.swift and OrbWeave.swift implementations.
 //! Scene geometry is generated once; a spatial index bounds per-pixel work.
+use super::raster::{Color, Shape, Surface};
 use super::{AvatarPose as Pose, AvatarStyle as Style, Material, Sample};
 use std::f32::consts::{PI, TAU};
 
@@ -15,12 +16,17 @@ struct Stroke {
     radius: f32,
     light: f32,
     material: Material,
+    delta: (f32, f32),
+    inverse_length2: f32,
+    radius2: f32,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Scene {
     strokes: Vec<Stroke>,
     cells: Vec<Vec<u16>>,
+    surfaces: Vec<Surface>,
+    surface_cells: Vec<Vec<u16>>,
 }
 
 impl Scene {
@@ -28,10 +34,12 @@ impl Scene {
         Self {
             strokes: Vec::new(),
             cells: vec![Vec::new(); CELLS * CELLS],
+            surfaces: Vec::new(),
+            surface_cells: vec![Vec::new(); CELLS * CELLS],
         }
     }
     fn add(&mut self, a: (f32, f32), b: (f32, f32), radius: f32, light: f32, material: Material) {
-        if self.strokes.len() >= MAX_PRIMITIVES
+        if self.strokes.len() + self.surfaces.len() >= MAX_PRIMITIVES
             || ![a.0, a.1, b.0, b.1, radius, light]
                 .iter()
                 .all(|v| v.is_finite())
@@ -42,10 +50,10 @@ impl Scene {
         }
         let radius = radius.clamp(0.002, 0.15);
         let bounds = (
-            a.0.min(b.0) - radius * 2.5,
-            a.1.min(b.1) - radius * 2.5,
-            a.0.max(b.0) + radius * 2.5,
-            a.1.max(b.1) + radius * 2.5,
+            a.0.min(b.0) - radius * 2.5 - 0.032,
+            a.1.min(b.1) - radius * 2.5 - 0.032,
+            a.0.max(b.0) + radius * 2.5 + 0.032,
+            a.1.max(b.1) + radius * 2.5 + 0.032,
         );
         if bounds.0 > EXTENT || bounds.1 > EXTENT || bounds.2 < -EXTENT || bounds.3 < -EXTENT {
             return;
@@ -57,6 +65,16 @@ impl Scene {
             radius,
             light: light.clamp(0., 1.),
             material,
+            delta: (b.0 - a.0, b.1 - a.1),
+            inverse_length2: {
+                let len = (b.0 - a.0).powi(2) + (b.1 - a.1).powi(2);
+                if len > 1e-9 {
+                    1. / len
+                } else {
+                    0.
+                }
+            },
+            radius2: radius * radius,
         });
         for y in cell(bounds.1)..=cell(bounds.3) {
             for x in cell(bounds.0)..=cell(bounds.2) {
@@ -66,6 +84,117 @@ impl Scene {
     }
     fn dot(&mut self, x: f32, y: f32, r: f32, light: f32, m: Material) {
         self.add((x, y), (x, y), r, light, m);
+    }
+    fn surface(
+        &mut self,
+        shape: Shape,
+        material: Material,
+        light: f32,
+        opacity: f32,
+        shading: u8,
+        additive: bool,
+    ) {
+        if self.strokes.len() + self.surfaces.len() >= MAX_PRIMITIVES {
+            return;
+        }
+        if let Shape::Triangle(p) = shape {
+            let area =
+                (p[1].0 - p[0].0) * (p[2].1 - p[0].1) - (p[1].1 - p[0].1) * (p[2].0 - p[0].0);
+            if !area.is_finite() || area.abs() < 1e-10 {
+                return;
+            }
+        }
+        let surface = Surface::new(shape, material, light, opacity, shading, additive);
+        let b = surface.bounds();
+        if ![b.0, b.1, b.2, b.3, light, opacity]
+            .iter()
+            .all(|x| x.is_finite())
+            || b.0 >= b.2
+            || b.1 >= b.3
+        {
+            return;
+        }
+        let i = self.surfaces.len() as u16;
+        self.surfaces.push(surface);
+        for y in cell(b.1 - 0.016)..=cell(b.3 + 0.016) {
+            for x in cell(b.0 - 0.016)..=cell(b.2 + 0.016) {
+                self.surface_cells[y * CELLS + x].push(i);
+            }
+        }
+    }
+    fn glow_line(&mut self, a: (f32, f32), b: (f32, f32), r: f32, light: f32, m: Material) {
+        self.line(a, b, r * 3.2, light * 0.09, m);
+        self.line(a, b, r, light, m);
+    }
+    pub(crate) fn rgba(&self, x: f32, y: f32, pixel: f32, palette: &super::Palette) -> [u8; 4] {
+        self.color(x, y, pixel, palette).rgba()
+    }
+    fn color(&self, x: f32, y: f32, pixel: f32, palette: &super::Palette) -> Color {
+        // At most two subdivisions (16 samples), only for tiny thumbnails.
+        // The common 64px+ path uses one spatial lookup per output pixel.
+        if pixel > 0.03125 {
+            let mut sum = Color::default();
+            for dy in [-0.25, 0.25] {
+                for dx in [-0.25, 0.25] {
+                    let c = self.color(x + dx * pixel, y + dy * pixel, pixel * 0.5, palette);
+                    for i in 0..3 {
+                        sum.rgb[i] += c.rgb[i] * 0.25;
+                    }
+                    sum.alpha += c.alpha * 0.25;
+                }
+            }
+            return sum;
+        }
+        if x.abs() > EXTENT || y.abs() > EXTENT {
+            return Color::default();
+        }
+        let index = cell(y) * CELLS + cell(x);
+        let mut color = Color::default();
+        for &i in &self.surface_cells[index] {
+            let surface = &self.surfaces[i as usize];
+            let layer = Color::from_sample(surface.sample(x, y, pixel), palette);
+            color = if surface.additive {
+                layer.light(color)
+            } else {
+                layer.over(color)
+            };
+        }
+        let mut levels = [0.0f32; 3];
+        for &i in &self.cells[index] {
+            let s = self.strokes[i as usize];
+            let (dx, dy) = s.delta;
+            let u = (((x - s.a.0) * dx + (y - s.a.1) * dy) * s.inverse_length2).clamp(0., 1.);
+            let d2 = (x - s.a.0 - u * dx).powi(2) + (y - s.a.1 - u * dy).powi(2);
+            // Integrating a Gaussian over the pixel footprint avoids flickering
+            // subpixel points and retains their energy rather than fattening them.
+            let radius2 = s.radius2;
+            let variance = radius2 + pixel * pixel / 6.;
+            if d2 > 6.25 * variance {
+                continue;
+            }
+            let energy = if s.inverse_length2 > 0. {
+                (radius2 / variance).sqrt()
+            } else {
+                radius2 / variance
+            };
+            levels[s.material as usize] += (-d2 / variance).exp() * s.light * energy;
+        }
+        let mut lights = Color::default();
+        for (i, value) in levels.into_iter().enumerate() {
+            if value < 0.001 {
+                continue;
+            }
+            lights = Color::from_sample(
+                Sample {
+                    material: [Material::Warm, Material::Eye, Material::Dim][i],
+                    light: (0.38 + value * 0.62).min(1.),
+                    coverage: (value * 1.6).sqrt().min(1.),
+                },
+                palette,
+            )
+            .light(lights);
+        }
+        lights.over(color)
     }
     fn line(&mut self, a: (f32, f32), b: (f32, f32), r: f32, light: f32, m: Material) {
         self.add(a, b, r, light, m);
@@ -105,6 +234,10 @@ impl Scene {
             return Sample::EMPTY;
         }
         let mut levels = [0.0f32; 3];
+        for &i in &self.surface_cells[cell(y) * CELLS + cell(x)] {
+            let p = self.surfaces[i as usize].sample(x, y, 0.);
+            levels[p.material as usize] += p.coverage * p.light;
+        }
         for &i in &self.cells[cell(y) * CELLS + cell(x)] {
             let s = self.strokes[i as usize];
             let (dx, dy) = (s.b.0 - s.a.0, s.b.1 - s.a.1);
@@ -332,15 +465,42 @@ fn planet(out: &mut Scene, style: Style, s: State) {
         }
         let (tx, ty, extra) = match style {
             Style::WatchHalo => {
-                let flow = fract(u + s.t * if s.pose == Pose::Listening { -0.4 } else { 0.4 });
-                let stream = (0.5 + 0.5 * (5. * a + 0.3 * s.t).sin()).powi(3)
-                    + 0.35 * (0.5 + 0.5 * (8. * a - 0.2 * s.t).sin()).powi(5);
-                let reach = 0.2 + 0.8 * s.band(band) + 0.38 * s.thinking() + 0.6 * s.working();
-                let rr = 0.97 + (reach * stream + 0.12) * flow.powf(1.5);
+                // Five broad and three finer streamers, broad at the foot and
+                // narrowing outward. Voice flows in to listen, out to speak;
+                // thought is a turning crown and work a fixed flowing crown.
+                let flow = if s.thinking() > 0. {
+                    u
+                } else {
+                    fract(
+                        u + s.t
+                            * if s.listening() > 0. {
+                                -0.4
+                            } else if s.working() > 0. {
+                                0.65
+                            } else {
+                                0.4
+                            },
+                    )
+                };
+                let crown =
+                    a - 0.25 * s.t * s.thinking() - 0.03 * s.t * (s.listening() + s.speaking());
+                let stream =
+                    0.5 + 0.5 * (0.62 * (5. * crown).cos() + 0.38 * (8. * crown + 1.7).cos());
+                let shape = 1. + 0.3 * (3. * a + 1.3).sin() + 0.15 * (5. * a - 0.4).sin();
+                let light = (0.5 + 0.5 * (a - 1.57 * s.t).cos()).powi(3);
+                let reach = shape
+                    * ((s.listening() + s.speaking()) * (0.35 + 1.1 * s.band(band))
+                        + 0.72 * s.thinking() * (0.75 + 0.25 * light)
+                        + 0.85 * s.working());
+                let length = reach * (0.2 + 0.8 * stream.powf(0.6 + 2.2 * flow));
+                let rr = 0.97 + length * flow.powf(1.4);
                 (
                     a.cos() * rr,
                     a.sin() * rr,
-                    0.28 + 0.5 * stream * (1. - flow),
+                    (0.35 + 0.55 * s.band(band) + 0.8 * s.thinking() * light + 0.4 * s.working())
+                        * (0.5 + 0.5 * stream)
+                        * (1. - flow).powi(2)
+                        + 0.25 * (1. - flow).powi(6),
                 )
             }
             Style::WatchVortex => {
@@ -461,6 +621,15 @@ fn planet(out: &mut Scene, style: Style, s: State) {
             Material::Warm
         };
         out.dot(x * 0.46, y * 0.46, 0.0055, light * s.light(), material);
+        if style == Style::WatchHalo && i % 5 == 0 {
+            out.dot(
+                x * 0.46,
+                y * 0.46,
+                0.018,
+                0.12 * light * s.light(),
+                material,
+            );
+        }
     }
     if s.pose == Pose::Waiting {
         out.ellipse(
@@ -474,43 +643,92 @@ fn planet(out: &mut Scene, style: Style, s: State) {
     }
 }
 
+// OrbScenes.RingGeometry: great circles normal to the six opposite-corner
+// axes of an icosahedron. Depth, harmonic swing and running beads are shared.
 fn rings(out: &mut Scene, s: State) {
-    for ring in 0..6 {
-        let f = ring as f32;
-        let a = f * PI / 6.
-            + 0.04 * (s.t * (0.4 + f * 0.15)).sin()
+    type V = (f32, f32, f32);
+    fn cross(a: V, b: V) -> V {
+        (
+            a.1 * b.2 - a.2 * b.1,
+            a.2 * b.0 - a.0 * b.2,
+            a.0 * b.1 - a.1 * b.0,
+        )
+    }
+    fn norm(a: V) -> V {
+        let l = (a.0 * a.0 + a.1 * a.1 + a.2 * a.2).sqrt();
+        (a.0 / l, a.1 / l, a.2 / l)
+    }
+    let phi = (1. + 5f32.sqrt()) / 2.;
+    let axes = [
+        (0., 1., phi),
+        (0., 1., -phi),
+        (1., phi, 0.),
+        (-1., phi, 0.),
+        (phi, 0., 1.),
+        (phi, 0., -1.),
+    ];
+    let turn = s.t * (0.12 + 1.1 * s.thinking());
+    let tilt = 0.42 + 0.1 * (s.t * 0.21).sin();
+    for (i, axis) in axes.into_iter().enumerate() {
+        let f = i as f32;
+        let n = norm(axis);
+        let u = norm(cross(
+            n,
+            if n.1.abs() < 0.9 {
+                (0., 1., 0.)
+            } else {
+                (1., 0., 0.)
+            },
+        ));
+        let v = cross(n, u);
+        let swing = s.band(i + 1);
+        let theta = (0.04 + 0.22 * swing) * (s.t * (0.4 + 0.15 * f + 3.5 * swing)).sin()
             + 0.3 * s.thinking() * (s.t * 1.4 + f).sin()
             + 0.45 * s.working() * (s.t * 3. - f * PI / 3.).sin();
-        let radius = 0.46 * (0.97 + s.band(ring) * (0.62 * s.level - 0.22));
-        let turn = s.t * s.motion();
-        let tilt = 0.42 + 0.1 * (s.t * 0.21).sin();
-        let points: Vec<_> = (0..97)
-            .map(|j| {
-                let q = TAU * j as f32 / 96.;
-                let (x, y, z) = (
-                    radius * q.cos(),
-                    radius * q.sin() * a.cos(),
-                    radius * q.sin() * a.sin(),
-                );
-                let bx = x * turn.cos() + z * turn.sin();
-                let bz = -x * turn.sin() + z * turn.cos();
-                (bx, y * tilt.cos() - bz * tilt.sin())
-            })
-            .collect();
-        out.path(
-            &points,
-            false,
-            0.005,
-            0.55 * s.light(),
-            if ring % 2 == 0 {
-                s.material()
-            } else {
-                Material::Dim
-            },
+        let v = (
+            v.0 * theta.cos() + n.0 * theta.sin(),
+            v.1 * theta.cos() + n.1 * theta.sin(),
+            v.2 * theta.cos() + n.2 * theta.sin(),
         );
-        for j in 0..5 {
-            let i = ((s.t * (5. + s.working() * 8.) + j as f32 * 19.2) as usize) % 96;
-            out.dot(points[i].0, points[i].1, 0.013, 0.9, s.material());
+        let radius = 0.46 * (0.97 + (s.listening() + s.speaking()) * (0.62 * swing - 0.22));
+        let spin = s.t
+            * (0.1 + 0.05 * f + 2.8 * swing + 1.5 * s.thinking())
+            * if i % 2 == 0 { 1. } else { -1. };
+        let mut previous = None;
+        for j in 0..=96 {
+            let angle = TAU * j as f32 / 96.;
+            let (x, y, z) = (
+                radius * (angle.cos() * u.0 + angle.sin() * v.0),
+                radius * (angle.cos() * u.1 + angle.sin() * v.1),
+                radius * (angle.cos() * u.2 + angle.sin() * v.2),
+            );
+            let (bx, bz) = (
+                x * turn.cos() + z * turn.sin(),
+                -x * turn.sin() + z * turn.cos(),
+            );
+            let point = (bx, y * tilt.cos() - bz * tilt.sin());
+            let depth = smooth(-0.5, 0.5, y * tilt.sin() + bz * tilt.cos());
+            let light =
+                ((0.2 + 0.8 * depth) * (0.75 + 0.55 * swing) + 0.12 * s.thinking()) * s.light();
+            let m = if s.pose == Pose::Error {
+                Material::Eye
+            } else if (angle / TAU + f / 6.).fract() < 0.33 {
+                Material::Dim
+            } else if (angle / TAU + f / 6.).fract() < 0.66 {
+                Material::Eye
+            } else {
+                Material::Warm
+            };
+            if let Some(p) = previous {
+                out.glow_line(p, point, 0.0045, light, m);
+                let calm = (5. * (angle - spin)).cos().max(0.).powi(12);
+                let race = (5. * (angle - spin - 3. * s.t)).cos().max(0.).powi(12);
+                let bead = calm * (1. - s.working()) + race * s.working();
+                if bead > 0.4 {
+                    out.line(p, point, 0.009, bead * (0.35 + 0.65 * depth), Material::Dim);
+                }
+            }
+            previous = Some(point);
         }
     }
 }
@@ -689,36 +907,71 @@ fn drop_scene(out: &mut Scene, s: State) {
         }
     }
 }
-fn wave(out: &mut Scene, s: State, membrane: bool) {
-    for k in 0..28 {
-        let base = (k as f32 / 27. - 0.5) * 1.3;
-        let points: Vec<_> = (0..80)
-            .map(|i| {
-                let x = (i as f32 / 79. - 0.5) * 1.6;
-                let pulse = (x * 5. - s.t * 1.5 + base * (2. + s.thinking() * 5.)).sin()
-                    * (0.035 + 0.12 * s.band(k % 8) + 0.045 * s.thinking());
-                let work = 0.08 * s.working() * (x * 6. + base * 4. - s.t * 3.).sin();
-                let lift = if membrane {
-                    0.26 * (-((x / 0.4).powi(2) + ((base + 0.1) / 0.65).powi(2))).exp()
-                } else {
-                    0.
-                };
-                (x, base + pulse + work - lift)
-            })
-            .collect();
-        out.path(
-            &points,
-            false,
-            0.0035,
-            0.35 + 0.35 * (k as f32 / 28.),
-            if k % 4 == 0 {
+// OrbConcepts.drawWave: five translucent ribbons, outgoing/incoming voice
+// wavefronts, and five spiral arms while tools work. OrbShape.wave is separate.
+fn wave(out: &mut Scene, s: State, _membrane: bool) {
+    let voiced = s.listening() + s.speaking();
+    for k in 0..5 {
+        let fk = k as f32;
+        let band = s.band(k * 7 / 4);
+        let rest = 0.1 * (1. - 0.12 * fk) * (0.8 + 0.2 * (s.t * 0.7 + fk).sin());
+        let amp = rest * (1. - voiced - s.thinking())
+            + voiced * (0.12 + 1.1 * band + 0.25 * s.voice())
+            + s.thinking() * (0.32 + 0.08 * (s.t * 0.5 + fk * 1.7).sin());
+        let freq = 1.3 + 0.55 * fk;
+        let pace = 0.6 + 0.25 * fk;
+        let counter = 0.4 * s.t * if k % 2 == 0 { 1. } else { -1. };
+        let mut prev = None;
+        for i in 0..=72 {
+            let u = i as f32 / 72.;
+            let x = 2. * u - 1.;
+            let env = (1. - x * x).powi(2) * (0.35 + 0.65 * (-x * x / 0.22).exp());
+            let calm = (freq * PI * x - pace * s.t + fk * 1.3).sin();
+            let thought = (freq * PI * x - 0.5 * pace * s.t + fk * 1.3 + counter).sin();
+            let outgoing = (freq * PI * x.abs() - 3.2 * pace * s.t + fk * 1.3).sin();
+            let incoming = (-freq * PI * x.abs() - 3.2 * pace * s.t + fk * 1.3).sin();
+            let y = amp
+                * env
+                * ((1. - voiced - s.thinking()) * calm
+                    + s.thinking() * thought
+                    + s.speaking() * outgoing
+                    + s.listening() * incoming);
+            let angle = TAU * 1.5 * u + s.t * 1.6 + fk * TAU / 5.;
+            let radius = 0.8 * (0.12 + 0.88 * u) * (1. + 0.06 * (u * 12. - s.t * 4.).sin());
+            let outer = (
+                mix(x * 0.94, radius * angle.cos(), s.working()),
+                mix(-y * 0.6, radius * angle.sin() * 0.92, s.working()),
+            );
+            let inner = (
+                mix(x * 0.94, radius * 0.8 * (angle - 0.12).cos(), s.working()),
+                mix(
+                    -y * 0.6 * 0.12,
+                    radius * 0.8 * (angle - 0.12).sin() * 0.92,
+                    s.working(),
+                ),
+            );
+            let m = if s.pose == Pose::Error {
+                Material::Eye
+            } else if u < 0.33 {
+                Material::Dim
+            } else if u < 0.67 {
                 Material::Eye
             } else {
-                s.material()
-            },
-        );
+                Material::Warm
+            };
+            if let Some((po, pi)) = prev {
+                out.surface(Shape::Triangle([po, outer, inner]), m, 0.75, 0.20, 0, true);
+                out.surface(Shape::Triangle([po, inner, pi]), m, 0.75, 0.20, 0, true);
+                out.glow_line(po, outer, 0.006, 0.78 * s.light(), m);
+            }
+            prev = Some((outer, inner));
+        }
+    }
+    if s.working() < 0.5 {
+        out.line((-0.94, 0.), (0.94, 0.), 0.002, 0.14, s.material());
     }
 }
+
 fn well(out: &mut Scene, s: State) {
     for axis in 0..2 {
         for k in 0..21 {
@@ -1088,46 +1341,164 @@ fn murmuration(out: &mut Scene, s: State) {
         );
     }
 }
+// OrbAvatars.drawEye: asymmetrical lids, iris fibers, dark pupil,
+// fixed catchlight, crease, brow and lashes, clipped to the opening.
 fn eye(out: &mut Scene, s: State) {
-    let open = if s.pose == Pose::Listening {
-        0.9
-    } else if s.pose == Pose::Thinking {
-        0.45
-    } else {
-        0.65
+    let blink = super::blink(s.t, 5.3, 0.20);
+    let open = (0.8 + 0.18 * s.listening() - 0.2 * s.thinking()) * blink;
+    let smile = 0.06 + 0.12 * s.speaking() + 0.06 * s.listening();
+    let upper =
+        |x: f32| -0.62 * open * (1. - (x / 1.25).powi(2)).max(0.).powf(0.75) + 0.04 * x / 1.25;
+    let lower = |x: f32| {
+        ((0.42 - smile) * open * (1. - (x / 1.25).powi(2)).max(0.).powf(0.9)
+            - 0.1 * smile * (1. - (x / 1.25).powi(2)).max(0.))
+            + 0.04 * x / 1.25
     };
-    let blink = super::blink(s.t, 5.6, 0.20);
-    let open = open * blink;
-    for upper in [-1., 1.] {
-        let pts: Vec<_> = (0..70)
-            .map(|i| {
-                let x = (i as f32 / 69. - 0.5) * 1.45;
-                (x, upper * open * 0.5 * (1. - (x / 0.725).powi(2)))
-            })
-            .collect();
-        out.path(&pts, false, 0.014, 0.65, s.material());
-    }
-    let ix = if s.pose == Pose::Working {
-        0.14 * (s.t * 2.1).sin()
-    } else if s.pose == Pose::Thinking {
-        0.11 * (s.t * 0.7).sin()
-    } else {
-        0.
-    };
-    let ry = (0.22 * open / 0.65).max(0.03);
-    out.ellipse((ix, 0.), (0.22, ry), 0., 0.015, 0.8, s.material());
-    for k in 0..60 {
-        let a = TAU * k as f32 / 60.;
-        let l = 0.16 + 0.04 * s.voice() + 0.015 * (a * 7. + s.t).sin();
-        out.line(
-            (ix + 0.09 * a.cos(), 0.09 * a.sin()),
-            (ix + l * a.cos(), l * a.sin() * open / 0.65),
-            0.004,
-            0.6,
-            Material::Eye,
+    let inside = |x: f32, y: f32| x.abs() < 1.25 && y > upper(x) && y < lower(x);
+    let at = |x: f32, y: f32| (x * 0.65, (y + 0.08) * 0.65);
+    let fix = (s.t * 2.2) as usize;
+    let gx = (0.1 * (s.t * 0.4).sin() + 0.05 * (s.t * 0.13).sin())
+        * (1. - s.listening())
+        * (1. - s.thinking())
+        * (1. - s.working())
+        + s.thinking() * (-0.26 + 0.07 * (s.t * 0.7).sin())
+        + s.working() * (hash(fix, 81.) - 0.5) * 0.5;
+    let gy = 0.03 * (s.t * 0.33).sin() * (1. - s.thinking()) * (1. - s.working())
+        - 0.17 * s.thinking()
+        + s.working() * (hash(fix, 82.) - 0.5) * 0.18
+        + 0.03;
+    let pupil = 0.16 + 0.07 * s.listening()
+        - 0.05 * s.speaking() * (1.5 * s.level).min(1.)
+        - 0.02 * s.thinking()
+        - 0.04 * s.working();
+    // The sclera's soft reflective field. Its triangles share the exact lid curve.
+    for i in 0..64 {
+        let x0 = -1.25 + 2.5 * i as f32 / 64.;
+        let x1 = -1.25 + 2.5 * (i + 1) as f32 / 64.;
+        let a = at(x0, upper(x0));
+        let b = at(x1, upper(x1));
+        let c = at(x1, lower(x1));
+        let d = at(x0, lower(x0));
+        out.surface(
+            Shape::Triangle([a, b, c]),
+            Material::Dim,
+            0.55,
+            0.14,
+            0,
+            false,
+        );
+        out.surface(
+            Shape::Triangle([a, c, d]),
+            Material::Dim,
+            0.55,
+            0.14,
+            0,
+            false,
         );
     }
-    out.dot(ix - 0.06, -0.06, 0.022, 1., Material::Dim);
+    // Fibers follow a winding path; the rim and inner collarette remain visible.
+    for k in 0..96 {
+        let angle = TAU * k as f32 / 96. + s.t * 0.0144;
+        let mut prev = None;
+        for j in 0..=9 {
+            let u = j as f32 / 9.;
+            let a = angle + 0.22 * (3. * u + angle * 2.).sin() * (1. - u);
+            let r = pupil + (0.46 - pupil) * u;
+            let x = gx + r * a.cos();
+            let y = gy + r * a.sin();
+            if !inside(x, y) {
+                prev = None;
+                continue;
+            }
+            let p = at(x, y);
+            let lum = 0.30
+                + 0.3 * (-((u - 0.32) / 0.08).powi(2)).exp()
+                + 0.4 * smooth(0.88, 1., u)
+                + 0.55 * s.band(k * 8 / 96) * (0.4 + 0.6 * u);
+            if let Some(previous) = prev {
+                out.line(
+                    previous,
+                    p,
+                    0.0024,
+                    lum,
+                    if k % 3 == 0 {
+                        Material::Eye
+                    } else {
+                        s.material()
+                    },
+                );
+            }
+            prev = Some(p);
+        }
+    }
+    for k in 0..96 {
+        let a = TAU * k as f32 / 96.;
+        let p = (gx + pupil * a.cos(), gy + pupil * a.sin());
+        if inside(p.0, p.1) {
+            let p = at(p.0, p.1);
+            out.dot(p.0, p.1, 0.0035, 0.65, s.material());
+        }
+    }
+    // Lids and crease respect the source's asymmetry and smile.
+    let up: Vec<_> = (0..71)
+        .map(|i| {
+            let x = -1.25 + 2.5 * i as f32 / 70.;
+            at(x, upper(x))
+        })
+        .collect();
+    let low: Vec<_> = (0..71)
+        .map(|i| {
+            let x = -1.25 + 2.5 * i as f32 / 70.;
+            at(x, lower(x))
+        })
+        .collect();
+    for p in up.windows(2) {
+        out.glow_line(p[0], p[1], 0.006, 0.70, s.material());
+    }
+    out.path(&low, false, 0.004, 0.42, s.material());
+    let crease: Vec<_> = (0..57)
+        .map(|i| {
+            let x = -1.04 + 2.08 * i as f32 / 56.;
+            at(
+                x,
+                upper(x) * 1.05 - 0.13 - 0.05 * open - 0.03 * s.listening(),
+            )
+        })
+        .collect();
+    out.path(&crease, false, 0.002, 0.14, Material::Dim);
+    let brow: Vec<_> = (0..49)
+        .map(|i| {
+            let x = -1.1 + 2.25 * i as f32 / 48.;
+            at(
+                x,
+                -0.98 - 0.1 * s.listening() - 0.04 * s.thinking()
+                    + 0.2 * (x / 1.15).powi(2)
+                    + 0.04 * (1. - open)
+                    + 0.03 * x / 1.15,
+            )
+        })
+        .collect();
+    out.path(&brow, false, 0.008, 0.35, s.material());
+    for k in 0..9 {
+        let f = k as f32 / 9.;
+        let x = 1.25 * (-0.4 + 1.32 * f);
+        if x.abs() > 1.21 {
+            continue;
+        }
+        let len = (0.07 + 0.1 * f * f) * (0.55 + 0.45 * open);
+        out.line(
+            at(x, upper(x)),
+            at(x + (0.2 + 0.8 * f) * len * 0.7, upper(x) - len * 1.05),
+            0.003,
+            0.60,
+            s.material(),
+        );
+    }
+    let catch = at(gx * 0.5 - 0.14, gy * 0.5 - 0.17);
+    if inside(gx * 0.5 - 0.14, gy * 0.5 - 0.17) {
+        out.dot(catch.0, catch.1, 0.016, 1., Material::Dim);
+        out.dot(catch.0, catch.1, 0.045, 0.06, Material::Dim);
+    }
 }
 
 fn metal_body(out: &mut Scene, c: (f32, f32), rx: f32, ry: f32, n: usize, s: State) {
@@ -1152,6 +1523,224 @@ fn lamp(out: &mut Scene, c: (f32, f32), r: f32, s: State) {
     out.dot(c.0, c.1, r, 0.55 + 0.4 * s.voice(), s.material());
     out.dot(c.0 - r * 0.25, c.1 - r * 0.25, r * 0.25, 0.9, Material::Eye);
 }
+// OrbMachines.drawHover: opaque domed barrel, dark visor, articulated
+// shoulders and three soft engine plumes, suspended above a floor-light pool.
+fn hover_machine(out: &mut Scene, s: State) {
+    let near = 1. + 0.12 * s.listening() - 0.05 * s.thinking();
+    let bob = 0.025 * (s.t * 1.05).sin() + 0.008 * (s.t * 2.3 + 1.).sin();
+    let oy = -0.1 + bob + 0.08 * s.listening() - 0.08 * s.thinking()
+        + 0.045 * s.speaking() * s.level
+        - 0.02 * s.working();
+    let yaw = 0.28 * (s.t * 0.29).sin() * (1. - s.thinking())
+        + s.thinking() * (0.5 + 0.05 * (s.t * 0.4).sin());
+    let cx = 0.02 * (s.t * 0.71).sin();
+    let body = |x: f32, y: f32| (cx + x * near, oy + y * near);
+    let rx = 0.47 * near;
+    // The pool remains separate from the robot: a visible hover gap.
+    out.surface(
+        Shape::Ellipse {
+            center: (0., 0.79),
+            radius: (0.50, 0.075),
+        },
+        s.material(),
+        0.72,
+        0.16 + 0.12 * s.working(),
+        2,
+        true,
+    );
+    for k in 0..3 {
+        let x = (k as f32 - 1.) * 0.24;
+        let nozzle = body(x, 0.38);
+        let len = 0.11 + 0.11 * s.working() + 0.012 * (s.t * 13. + k as f32).sin();
+        out.surface(
+            Shape::Ellipse {
+                center: (nozzle.0, nozzle.1 + len * 0.65),
+                radius: (0.052, len),
+            },
+            s.material(),
+            0.9,
+            0.60 + 0.25 * s.working(),
+            2,
+            true,
+        );
+        out.surface(
+            Shape::Ellipse {
+                center: (nozzle.0, nozzle.1),
+                radius: (0.033, 0.012),
+            },
+            Material::Dim,
+            1.,
+            0.95,
+            0,
+            true,
+        );
+    }
+    // Rounded arms unfold forward while tools run. Metallic shoulder and wrist.
+    for side in [-1., 1.] {
+        let a = body(side * 0.46, 0.04);
+        let b = body(
+            side * (0.50 + 0.18 * s.working()),
+            0.23 - 0.06 * s.working(),
+        );
+        out.glow_line(a, b, 0.045, 0.35, Material::Dim);
+        out.surface(
+            Shape::Ellipse {
+                center: b,
+                radius: (0.047, 0.05),
+            },
+            Material::Dim,
+            0.85,
+            1.,
+            1,
+            false,
+        );
+    }
+    out.surface(
+        Shape::Ellipse {
+            center: body(0., 0.29),
+            radius: (rx, 0.13 * near),
+        },
+        Material::Dim,
+        0.68,
+        1.,
+        1,
+        false,
+    );
+    out.surface(
+        Shape::Rounded {
+            center: body(0., 0.065),
+            half: (rx, 0.25 * near),
+            radius: 0.045,
+        },
+        Material::Dim,
+        0.92,
+        1.,
+        1,
+        false,
+    );
+    out.surface(
+        Shape::Ellipse {
+            center: body(0., -0.19),
+            radius: (rx, 0.25 * near),
+        },
+        Material::Dim,
+        1.,
+        1.,
+        1,
+        false,
+    );
+    out.surface(
+        Shape::Ellipse {
+            center: body(-0.025, -0.425),
+            radius: (0.105, 0.026),
+        },
+        Material::Dim,
+        0.74,
+        1.,
+        1,
+        false,
+    );
+    let visor_y = -0.065;
+    out.surface(
+        Shape::Rounded {
+            center: body(0., visor_y),
+            half: (rx * 1.002, 0.102 * near),
+            radius: 0.034,
+        },
+        Material::Eye,
+        0.025,
+        1.,
+        0,
+        false,
+    );
+    out.surface(
+        Shape::Ellipse {
+            center: body(yaw * 0.10, visor_y),
+            radius: (0.35, 0.13),
+        },
+        s.material(),
+        0.45,
+        0.12 + 0.2 * s.voice(),
+        2,
+        true,
+    );
+    for y in [-0.17, 0.04, 0.29] {
+        let points: Vec<_> = (0..33)
+            .map(|i| {
+                let x = (i as f32 / 32. - 0.5) * 0.9;
+                body(x, y + 0.025 * (1. - (x / 0.45).powi(2)))
+            })
+            .collect();
+        out.path(
+            &points,
+            false,
+            0.003,
+            if y < 0. { 0.60 } else { 0.32 },
+            Material::Dim,
+        );
+    }
+    let blink = super::blink(s.t + 1.9, 5.7, 0.20) * (1. - 0.48 * s.thinking());
+    for side in [-1., 1.] {
+        let eye = body(side * 0.18 * yaw.cos() + yaw.sin() * 0.19, visor_y + 0.015);
+        out.surface(
+            Shape::Ellipse {
+                center: eye,
+                radius: (0.086, 0.086),
+            },
+            Material::Dim,
+            0.50,
+            1.,
+            1,
+            false,
+        );
+        out.surface(
+            Shape::Ellipse {
+                center: eye,
+                radius: (0.066, 0.064 * blink.max(0.14)),
+            },
+            s.material(),
+            0.75 + 0.25 * s.voice(),
+            1.,
+            0,
+            false,
+        );
+        out.surface(
+            Shape::Ellipse {
+                center: eye,
+                radius: (0.13, 0.10 * blink.max(0.25)),
+            },
+            s.material(),
+            0.70,
+            0.20 + 0.30 * s.voice(),
+            2,
+            true,
+        );
+        out.dot(
+            eye.0 - 0.015,
+            eye.1 - 0.018 * blink,
+            0.012,
+            0.85,
+            Material::Dim,
+        );
+    }
+    if s.thinking() > 0. {
+        let x = 0.36 * (s.t * 0.7).sin();
+        out.dot(body(x, 0.).0, body(0., 0.).1, 0.025, 0.7, s.material());
+    }
+    if s.working() > 0. {
+        let tool = body(0.68, 0.15);
+        for k in 0..3 {
+            let angle = s.t * 7. + k as f32 * TAU / 3.;
+            out.line(
+                tool,
+                (tool.0 + 0.07 * angle.cos(), tool.1 + 0.07 * angle.sin()),
+                0.005,
+                0.65,
+                s.material(),
+            );
+        }
+    }
+}
 fn machine(out: &mut Scene, style: Style, s: State) {
     let bob = 0.012 * (s.t * 0.85).sin() + 0.025 * s.listening() * (s.t * 1.05).sin();
     let cx = 0.025 * (s.t * 0.3).sin()
@@ -1171,34 +1760,7 @@ fn machine(out: &mut Scene, style: Style, s: State) {
             );
             out.dot(-0.08, -0.08, 0.025, 1., Material::Eye);
         }
-        Style::WatchHover => {
-            metal_body(out, (cx, bob), 0.48, 0.42, 1000, s);
-            out.line(
-                (-0.44, 0.01 + bob),
-                (0.44, 0.01 + bob),
-                0.055,
-                0.36,
-                Material::Dim,
-            );
-            for side in [-1., 1.] {
-                lamp(out, (cx + side * 0.23, 0.01 + bob), 0.052, s);
-                out.line(
-                    (side * 0.45, bob),
-                    (side * (0.62 + 0.06 * s.working()), 0.16 + bob),
-                    0.032,
-                    0.6,
-                    Material::Dim,
-                );
-            }
-            for k in -1..=1 {
-                lamp(
-                    out,
-                    (k as f32 * 0.19, 0.42 + bob),
-                    0.027 + 0.009 * s.working(),
-                    s,
-                );
-            }
-        }
+        Style::WatchHover => hover_machine(out, s),
         Style::WatchRover | Style::WatchSpark => {
             let spark = style == Style::WatchSpark;
             metal_body(
@@ -1779,13 +2341,17 @@ mod tests {
             let scene = build(st, Pose::Speaking, 0.6, 1.1, [0.6; 8]);
             assert!(!scene.strokes.is_empty(), "{st:?}");
             assert!(
-                scene.strokes.len() < MAX_PRIMITIVES,
+                scene.strokes.len() + scene.surfaces.len() < MAX_PRIMITIVES,
                 "{st:?} exhausted its bounded primitive budget"
             );
             assert!(scene
                 .cells
                 .iter()
                 .all(|c| c.iter().all(|&i| (i as usize) < scene.strokes.len())));
+            assert!(scene
+                .surface_cells
+                .iter()
+                .all(|c| c.iter().all(|&i| (i as usize) < scene.surfaces.len())));
         }
     }
     #[test]
@@ -1799,5 +2365,62 @@ mod tests {
             }
         }
         assert_eq!(n, scene.strokes.len());
+    }
+    #[test]
+    fn overlapping_materials_keep_both_color_channels() {
+        let mut scene = Scene::new();
+        scene.dot(0., 0., 0.03, 0.4, Material::Warm);
+        scene.dot(0., 0., 0.03, 0.4, Material::Eye);
+        let palette = [[0xff0000ff; 256], [0x00ff00ff; 256], [0x0000ffff; 256]];
+        let mixed = scene.rgba(0., 0., 0.01, &palette);
+        assert!(
+            mixed[0] > 150 && mixed[1] > 150 && mixed[2] == 0,
+            "{mixed:?}"
+        );
+        assert!(scene.sample(0., 0.).material != Material::Dim);
+    }
+    #[test]
+    fn pixel_integration_reduces_subpixel_point_flicker() {
+        let palette = [[0xffffffff; 256]; 3];
+        let mut point_totals = Vec::new();
+        let mut pixel_totals = Vec::new();
+        for step in 0..8 {
+            let mut scene = Scene::new();
+            scene.dot(step as f32 * 0.0025, 0., 0.002, 0.8, Material::Warm);
+            let mut point = 0.;
+            let mut pixel = 0.;
+            for x in -4..=4 {
+                for y in -4..=4 {
+                    point += scene.rgba(x as f32 * 0.02, y as f32 * 0.02, 0., &palette)[3] as f32;
+                    pixel += scene.rgba(x as f32 * 0.02, y as f32 * 0.02, 0.02, &palette)[3] as f32;
+                }
+            }
+            point_totals.push(point);
+            pixel_totals.push(pixel);
+        }
+        let spread = |xs: &[f32]| {
+            xs.iter().copied().fold(0., f32::max) - xs.iter().copied().fold(f32::INFINITY, f32::min)
+        };
+        assert!(spread(&pixel_totals) < spread(&point_totals) * 0.4);
+    }
+    #[test]
+    fn focused_designs_retain_source_structure_and_opaque_hover_shell() {
+        let wave = build(Style::WatchWave, Pose::Speaking, 0.6, 2.3, [0.6; 8]);
+        assert!(
+            wave.surfaces.len() > 500,
+            "wave ribbons have translucent bodies"
+        );
+        let hover = build(Style::WatchHover, Pose::Ready, 0., 2.3, [0.; 8]);
+        assert!(
+            hover.surfaces.len() > 15,
+            "shell, visor, engines and eyes are surfaces"
+        );
+        let palette = [[0xffffffff; 256]; 3];
+        assert_eq!(hover.rgba(0., 0., 0.01, &palette)[3], 255);
+        let eye = build(Style::WatchEye, Pose::Speaking, 0.6, 2.3, [0.6; 8]);
+        assert!(
+            eye.strokes.len() > 900,
+            "iris fibers, lids and brow remain separate"
+        );
     }
 }

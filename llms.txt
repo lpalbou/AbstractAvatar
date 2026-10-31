@@ -9,6 +9,7 @@
 - [docs/architecture.md](docs/architecture.md): Shared generation and platform ownership
 - [docs/api.md](docs/api.md): Rust, Python, C and WebAssembly interfaces
 - [docs/frame-contract.md](docs/frame-contract.md): Bounded descriptors, RGBA pixels and lifecycle
+- [docs/rendering.md](docs/rendering.md): Compositing, antialiasing and host palette integration
 - [docs/catalog.md](docs/catalog.md): Style identifiers, activity and provenance
 - [docs/faq.md](docs/faq.md): Format and integration questions
 - [docs/troubleshooting.md](docs/troubleshooting.md): Setup, input and resource errors

@@ -54,7 +54,11 @@ mod catalog;
 pub use catalog::AvatarStyle;
 #[cfg(feature = "json")]
 pub mod descriptor;
+mod raster;
 mod scenes;
+/// Host-owned material shade ramps, packed as `0xRRGGBBAA`.
+/// Rows correspond to [`Material::Warm`], [`Material::Eye`] and [`Material::Dim`].
+pub type Palette = [[u32; 256]; 3];
 impl AvatarPose {
     pub const ALL: [Self; 7] = [
         Self::Ready,
@@ -119,6 +123,33 @@ pub struct Frame {
     scene: Option<std::sync::Arc<scenes::Scene>>,
 }
 impl Frame {
+    /// Sample a composited foreground in straight RGBA8, preserving colored light layers.
+    ///
+    /// `pixel_size` is a pixel's full width in centered coordinates (normally
+    /// `2.0 / min(width, height)`). Zero requests an analytic point sample. Values
+    /// outside `0..=0.125`, and non-finite coordinates, return transparent black.
+    /// This function allocates nothing. Composite its result over the host's background.
+    pub fn rgba(&self, x: f32, y: f32, pixel_size: f32, palette: &Palette) -> [u8; 4] {
+        if !x.is_finite()
+            || !y.is_finite()
+            || !pixel_size.is_finite()
+            || x.abs() > 1.5
+            || y.abs() > 1.5
+            || !(0.0..=0.125).contains(&pixel_size)
+        {
+            return [0; 4];
+        }
+        if let Some(scene) = &self.scene {
+            scene.rgba(
+                x - self.gaze.x * 0.045,
+                y - self.gaze.y * 0.035,
+                pixel_size,
+                palette,
+            )
+        } else {
+            raster::Color::from_sample(self.sample(x, y), palette).rgba()
+        }
+    }
     pub fn new(style: AvatarStyle, pose: AvatarPose, level: f32, time: f32, gaze: Gaze) -> Self {
         Self::with_bands(style, pose, level, time, gaze, [level; 8])
     }

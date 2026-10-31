@@ -20,6 +20,11 @@ The [descriptor](frame-contract.md) selects built-in generation; it does not int
 programming language. Native and WebAssembly builds run the same algorithms. Platform-specific
 presenters translate frames into terminal cells, a canvas image or a native image object.
 
+Shared rasterization composes shaded surfaces and material light before returning RGBA. Built-in
+scene primitives and spatial indexes are bounded; presenters do not recreate the geometry or its
+color blending. Rust presenters can use `Frame::rgba` with the same palette ramps as the ABI.
+See [rendering](rendering.md).
+
 Core generation has no network, microphone, model, timer, global mouse listener or UI-framework
 dependency. Gaze and audio levels are inputs supplied by the host. Keeping those responsibilities
 explicit lets multiple applications present the same design without sharing application state.

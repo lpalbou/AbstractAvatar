@@ -10,6 +10,7 @@ DOCS = [
     ("docs/architecture.md", "Shared generation and platform ownership"),
     ("docs/api.md", "Rust, Python, C and WebAssembly interfaces"),
     ("docs/frame-contract.md", "Bounded descriptors, RGBA pixels and lifecycle"),
+    ("docs/rendering.md", "Compositing, antialiasing and host palette integration"),
     ("docs/catalog.md", "Style identifiers, activity and provenance"),
     ("docs/faq.md", "Format and integration questions"),
     ("docs/troubleshooting.md", "Setup, input and resource errors"),

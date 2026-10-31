@@ -9,6 +9,7 @@
 - [docs/architecture.md](docs/architecture.md): Shared generation and platform ownership
 - [docs/api.md](docs/api.md): Rust, Python, C and WebAssembly interfaces
 - [docs/frame-contract.md](docs/frame-contract.md): Bounded descriptors, RGBA pixels and lifecycle
+- [docs/rendering.md](docs/rendering.md): Compositing, antialiasing and host palette integration
 - [docs/catalog.md](docs/catalog.md): Style identifiers, activity and provenance
 - [docs/faq.md](docs/faq.md): Format and integration questions
 - [docs/troubleshooting.md](docs/troubleshooting.md): Setup, input and resource errors
@@ -52,7 +53,7 @@ with Cargo. See [getting started](docs/getting-started.md) for library use and p
 
 ## Integrate a player
 
-- **Rust:** create a `Frame` and map its material samples through your theme.
+- **Rust:** create a `Frame` and sample composited RGBA through your theme's material ramps.
 - **Browser:** run the bundled WebAssembly generator and present RGBA pixels on Canvas.
 - **Python/native:** request RGBA pixels through the binding or the C interface and present them
   with your UI toolkit.
@@ -115,15 +116,17 @@ See [the frame contract](frame-contract.md) for dimensions, ownership and reduce
 ## Use Rust
 
 ```rust
-use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze};
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
 let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
-let sample = frame.sample(0.2, -0.1);
+// Replace these flat ramps with your theme's 256 shades per material.
+let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
+let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
 ```
 
-The sample carries material, light and coverage; map these through your theme. Build one frame
-per state/time combination and sample it across the image, rather than reconstructing it for
-every pixel.
+RGBA samples retain overlapping material colors. Composite the returned foreground over your
+background. Build one frame per state/time combination and sample it across the image, rather
+than reconstructing geometry for every pixel. See [rendering](rendering.md) for pixel footprints.
 
 ## Build for browsers
 
@@ -163,6 +166,11 @@ The [descriptor](frame-contract.md) selects built-in generation; it does not int
 programming language. Native and WebAssembly builds run the same algorithms. Platform-specific
 presenters translate frames into terminal cells, a canvas image or a native image object.
 
+Shared rasterization composes shaded surfaces and material light before returning RGBA. Built-in
+scene primitives and spatial indexes are bounded; presenters do not recreate the geometry or its
+color blending. Rust presenters can use `Frame::rgba` with the same palette ramps as the ABI.
+See [rendering](rendering.md).
+
 Core generation has no network, microphone, model, timer, global mouse listener or UI-framework
 dependency. Gaze and audio levels are inputs supplied by the host. Keeping those responsibilities
 explicit lets multiple applications present the same design without sharing application state.
@@ -200,7 +208,17 @@ specified by that object.
 
 `AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
 activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
-`Frame::sample(x, y)` returns material/light/coverage in centered coordinates, with y downward.
+`Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
+`Palette` is `[[u32; 256]; 3]`: Warm, Eye and Dim shade ramps packed as `0xRRGGBBAA`.
+Prepare these ramps once per theme. `pixel_size` is the full normalized pixel width, usually
+`2.0 / min(width, height)`, bounded to 0..0.125; zero requests an analytic point sample.
+Non-finite inputs, out-of-range pixel sizes and coordinates outside -1.5..1.5 return transparent
+black. Coordinates are centered, with y downward and one unit equal to the avatar radius.
+
+`Frame::sample(x, y)` remains available as a single material/light/coverage approximation.
+Use `rgba` to retain overlapping material colors, translucent ribbons and opaque shaded surfaces.
+The native, Python and WebAssembly renderers use this same compositing path. See
+[rendering](rendering.md) for antialiasing, palette behavior and scheduling boundaries.
 
 The `ffi` feature supplies the native C/WebAssembly adapter. Geometry remains usable without a
 UI toolkit. The optional descriptor feature parses the versioned parameter object.
@@ -257,6 +275,12 @@ should use a local elapsed clock, not an absolute epoch timestamp.
 - Each dimension is between 1 and 512 inclusive; at most 16 native handles can be live.
 - Transparent output carries alpha; the host chooses its background and palette.
 
+Output uses straight alpha: RGB channels are not premultiplied by the returned alpha. Internally,
+light and surfaces compose in premultiplied form, preserving contributions from all three host
+material ramps. Pixels with zero alpha are transparent black. Native frame rendering derives
+the antialiasing footprint from the dimensions, capped at 0.125 normalized units. See
+[rendering](rendering.md) for the Rust sampling equivalent.
+
 RGBA is a pixel layout, not a new media container. [PNG](https://www.w3.org/TR/png/) provides the
 portable file representation for previews. The tiny descriptor is an AbstractAvatar contract;
 it is not claimed to be a general procedural-media standard.
@@ -275,12 +299,90 @@ The host chooses the frame rate. The pose API provides bounded cadence suggestio
 states need fewer frames than speaking or working states. A frame request does no background
 work after it returns.
 
+Descriptor version 1 selects one activity state for an independent frame. It does not contain
+transition weights, velocity, personality, emotional interpretation or audio history. Switching
+states can change the shape immediately; a future transition contract requires explicit timing,
+continuity and reduced-motion semantics. Hosts should keep elapsed time monotonic across state
+changes, and report observed activity and measured voice inputs rather than inventing behavior.
+
 ## Browser execution
 
 [WebAssembly](https://webassembly.github.io/spec/core/intro/introduction.html) executes the shared
 generator in the browser. Load a trusted bundled artifact, verify its ABI/catalog/memory
 requirements, and give it no ambient host imports. Descriptors must never choose arbitrary
 modules. The browser presenter only schedules and presents frames.
+
+---
+
+## docs/rendering.md
+
+# Rendering and theme integration
+
+AbstractAvatar generates foreground RGBA frames from trusted built-in designs. The same Rust
+compositing path serves Python, native and WebAssembly hosts. Hosts provide their theme, observed
+activity, time, voice inputs and optional gaze; the generator owns geometry and rasterization.
+See [the API](api.md) for entry points and [the frame contract](frame-contract.md) for ownership.
+
+## Choose a sampling interface
+
+Use `Frame::rgba(x, y, pixel_size, &palette)` for full rendering. It preserves overlapping colored
+light, soft glow, translucent ribbons and shaded opaque surfaces. `Frame::sample` supplies a
+single-material approximation for consumers that need material identity instead of color.
+
+Coordinates are centered, with y downward. One unit is the avatar radius; normal square frames
+sample x/y in -1..1. The supported sampling extent is -1.5..1.5 on each axis. RGBA sampling returns
+transparent black outside this extent or for invalid numbers.
+
+`pixel_size` is a pixel's full width in normalized coordinates. For a square 128-pixel image use
+`2.0 / 128.0`. Non-square or terminal hosts can use the larger of their normalized horizontal and
+vertical sample steps. Values must be finite and in 0..0.125 inclusive; zero requests analytic
+point sampling. A host with a larger footprint can cap it at 0.125, as the native renderer does.
+
+Thin strokes and particles integrate a Gaussian footprint to reduce subpixel flicker. Filled
+edges use analytic coverage. Footprints above 0.03125 subdivide at most twice, producing at most
+16 samples per output pixel; ordinary 64-pixel and larger images need one spatial lookup.
+
+## Supply material ramps
+
+`Palette` contains three arrays of 256 packed `0xRRGGBBAA` shades, in Warm, Eye and Dim order.
+Each ramp runs from shadow at index 0 to highlight at index 255. Build ramps once per theme,
+outside the pixel loop. Alpha in every ramp is respected.
+
+```rust
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
+
+let palette: Palette = [
+    std::array::from_fn(|i| u32::from_be_bytes([i as u8, 80, 40, 255])),
+    std::array::from_fn(|i| u32::from_be_bytes([40, i as u8, 140, 255])),
+    std::array::from_fn(|i| u32::from_be_bytes([i as u8, i as u8, i as u8, 255])),
+];
+let frame = Frame::new(AvatarStyle::WatchHover, AvatarPose::Ready, 0.0, 1.2, Gaze::default());
+let foreground = frame.rgba(0.0, 0.0, 2.0 / 128.0, &palette);
+assert_eq!(foreground[3], 255);
+```
+
+Composition uses premultiplied color internally and returns straight-alpha RGBA8. An output
+alpha of zero has RGB zero. Composite the foreground over the host background once. The native
+renderer can do that final background composition when `transparent` is false.
+
+Three theme anchors define the available color vocabulary. A Watch-derived design can therefore
+have the same silhouette and movement in a warm, cool or monochrome host theme. A source design's
+independent rainbow palette is not a separate implicit palette in this contract.
+
+## Reuse prepared frames
+
+Build one `Frame` for a state/time/input combination, then sample it across the image. Geometry
+and spatial indexes are prepared once; `rgba` and `sample` allocate no per-pixel objects. Apple
+scene generation is limited to 4096 total strokes and surfaces, with 48×48 spatial indexes.
+Native raster buffers remain limited to 512 pixels per dimension and 16 live handles.
+
+Hosts choose resolution, frame cadence and visibility. Stop clocks when hidden and use a static
+frame for reduced motion. Supersampling cannot restore details lost when an image is converted
+to a small terminal cell grid; pixel-capable presenters can retain more of the generated image.
+
+Version 1 is a stateless frame contract. Transition history, accumulated phase and expressive
+behavior need a separately specified continuity contract; they are not inferred from a pose
+label. See [the frame contract](frame-contract.md) and [ADR 0002](adr/0002-material-compositing.md).
 
 ---
 
@@ -355,6 +457,14 @@ opt into an avatar source when they want one.
 No. The shared catalog and generator are reusable independently of client adoption. Watch and
 iPhone implementations remain separate until explicitly integrated. See [catalog](catalog.md).
 
+## Will every host reproduce the Apple colors and transitions exactly?
+
+The shared designs retain their own geometry and activity cues. Each host supplies three theme
+material ramps, so color follows those anchors rather than an independent hardcoded Apple
+palette. Version 1 requests independent frames and does not carry the Apple engine's accumulated
+transition state or audio history. Terminal cell modes also have less detail than an RGBA image.
+See [rendering](rendering.md) and [the frame contract](frame-contract.md).
+
 ---
 
 ## docs/troubleshooting.md
@@ -416,6 +526,20 @@ entries. Changes to ownership or frame semantics belong in [architecture decisio
 Document public API changes in [the API reference](docs/api.md) and [changelog](CHANGELOG.md).
 Keep documentation indexes current with `python scripts/docs.py`; `python scripts/docs.py --check`
 checks freshness without writing files.
+
+For raster changes, compare native and WebAssembly output with identical ramps and inputs:
+
+```sh
+rustup target add wasm32-unknown-unknown
+python scripts/build_artifacts.py
+python scripts/check_portability.py --native artifacts/libabstractavatar.so
+```
+
+The comparison uses Node.js and a built native library. On macOS use
+`artifacts/libabstractavatar.dylib`; on Windows use `artifacts/abstractavatar.dll`.
+It exercises every style/state at 64 pixels plus the focused particle, ribbon and shaded-surface
+designs at 32 and 128 pixels, including partial material alpha and eight voice bands.
+Visual review still matters: pixel agreement establishes portability, not design fidelity.
 
 Report security concerns using [SECURITY.md](SECURITY.md).
 
@@ -492,6 +616,15 @@ SOFTWARE.
 - Rust sampling API, native C interface and browser WebAssembly build.
 - Python rendering API and PNG-preview command.
 - Versioned parameter descriptor and bounded raster frame contract.
+- Composited Rust `Frame::rgba` sampling with host-owned palettes and bounded pixel footprints.
+
+### Fixed
+
+- Legacy Vortex responds to measured microphone loudness while Listening.
+- Overlapping material light retains each color contribution in native and browser frames.
+- Watch Wave uses five translucent ribbons and a working spiral; Watch Hover has a shaded shell,
+  visor and engine plumes. Watch Rings uses six icosahedral great circles, and Watch Eye retains
+  asymmetric lids, iris fibers, a brow and lashes. Watch Halo has uneven flowing streamers.
 
 ### Compatibility
 

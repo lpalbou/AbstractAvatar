@@ -32,15 +32,17 @@ See [the frame contract](frame-contract.md) for dimensions, ownership and reduce
 ## Use Rust
 
 ```rust
-use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze};
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
 let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
-let sample = frame.sample(0.2, -0.1);
+// Replace these flat ramps with your theme's 256 shades per material.
+let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
+let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
 ```
 
-The sample carries material, light and coverage; map these through your theme. Build one frame
-per state/time combination and sample it across the image, rather than reconstructing it for
-every pixel.
+RGBA samples retain overlapping material colors. Composite the returned foreground over your
+background. Build one frame per state/time combination and sample it across the image, rather
+than reconstructing geometry for every pixel. See [rendering](rendering.md) for pixel footprints.
 
 ## Build for browsers
 
