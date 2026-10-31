@@ -1,0 +1,9 @@
+/target/
+/artifacts/
+/build/
+/dist/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+*.pyc
+/python/abstractavatar/_native/

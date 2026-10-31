@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lpalbou/AbstractAvatar/schema/descriptor.schema.json",
+  "title": "AbstractAvatar frame descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "style", "state", "time", "level"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "style": {"type": "string", "minLength": 1, "maxLength": 64, "description": "A stable id enumerated by the renderer's catalog"},
+    "state": {"enum": ["ready", "thinking", "working", "listening", "speaking", "waiting", "error"]},
+    "time": {"type": "number", "minimum": 0, "maximum": 86400},
+    "level": {"type": "number", "minimum": 0, "maximum": 1},
+    "gaze": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": -1, "maximum": 1}},
+    "bands": {"type": "array", "minItems": 8, "maxItems": 8, "items": {"type": "number", "minimum": 0, "maximum": 1}}
+  }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "abstractavatar"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "MIT"
+description = "Platform-independent procedural activity avatars with optional native/WebAssembly ABI"
+repository = "https://github.com/lpalbou/AbstractAvatar"
+[lib]
+crate-type = ["rlib", "cdylib"]
+[features]
+default = []
+ffi = []
+json = ["dep:serde", "dep:serde_json"]
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }

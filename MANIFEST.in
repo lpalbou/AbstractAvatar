@@ -1,0 +1,11 @@
+include Cargo.toml Cargo.lock LICENSE avatar.h catalog.json
+recursive-include src *.rs
+recursive-include schema *.json
+recursive-include python *.py
+recursive-include scripts *.py
+recursive-include docs *.md
+recursive-include docs/media *.png
+recursive-include skills *.md
+include llms.txt llms-full.txt
+include ACKNOWLEDGEMENTS.md CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md SECURITY.md
+recursive-exclude python/abstractavatar/_native *

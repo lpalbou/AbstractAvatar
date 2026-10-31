@@ -1,0 +1,445 @@
+{
+  "schema_version": 1,
+  "designs": [
+    {
+      "code": 0,
+      "id": "halo",
+      "name": "Halo orb",
+      "description": "A luminous corona",
+      "reference": "A",
+      "family": "orbs",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 1,
+      "id": "hover",
+      "name": "Hover robot",
+      "description": "Warm eyes and floating thrusters",
+      "reference": "HV",
+      "family": "machines",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 2,
+      "id": "vortex",
+      "name": "Vortex",
+      "description": "Spiral arms gather to listen and reach out to speak",
+      "reference": "B",
+      "family": "orbs",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 3,
+      "id": "eclipse",
+      "name": "Eclipse",
+      "description": "A dark disc, golden corona and working rays",
+      "reference": "U",
+      "family": "forms",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 4,
+      "id": "eye",
+      "name": "Eye",
+      "description": "A watchful eye that opens to listen and scans to work",
+      "reference": "K",
+      "family": "faces",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 5,
+      "id": "rover",
+      "name": "Rover",
+      "description": "A curious tracked robot with attentive binocular eyes",
+      "reference": "Q",
+      "family": "machines",
+      "source": "abstracttui/src/widgets/avatar.rs",
+      "kind": "shaded"
+    },
+    {
+      "code": 6,
+      "id": "watch-halo",
+      "name": "Watch Halo",
+      "description": "rays of light around it, as long as your voice is loud",
+      "reference": "A",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 7,
+      "id": "watch-vortex",
+      "name": "Watch Vortex",
+      "description": "the points swirl out into arms that reach with the voice",
+      "reference": "B",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 8,
+      "id": "watch-nebula",
+      "name": "Watch Nebula",
+      "description": "a cloud that breathes outward with the voice",
+      "reference": "C",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 9,
+      "id": "watch-rings",
+      "name": "Watch Rings",
+      "description": "a geodesic structure of rigid rings, each turning with its own part of the voice",
+      "reference": "D",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbScenes.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 10,
+      "id": "watch-liquid",
+      "name": "Watch Liquid",
+      "description": "its surface ripples in waves with the voice",
+      "reference": "E",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 11,
+      "id": "watch-galaxy",
+      "name": "Watch Galaxy",
+      "description": "a spiral galaxy that turns and spreads its arms with the voice",
+      "reference": "F",
+      "family": "orbs",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 12,
+      "id": "watch-lotus",
+      "name": "Watch Lotus",
+      "description": "a bud that listens, opens to think, branches out to work, blooms to speak",
+      "reference": "R",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 13,
+      "id": "watch-crystal",
+      "name": "Watch Crystal",
+      "description": "a crystal that grows to think, gathers orbits to work, spreads wings to speak",
+      "reference": "S",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 14,
+      "id": "watch-eclipse",
+      "name": "Watch Eclipse",
+      "description": "a golden eclipse: a corona to listen, orbits to think, a shutter to work, bars to speak",
+      "reference": "U",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 15,
+      "id": "watch-synapse",
+      "name": "Watch Synapse",
+      "description": "a network of nodes: tangled to think, orbiting to work, a starburst to speak",
+      "reference": "V",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 16,
+      "id": "watch-drop",
+      "name": "Watch Drop",
+      "description": "a drop of light: a vortex to think, fibres to work, a horn of particles to speak",
+      "reference": "W",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 17,
+      "id": "watch-wave",
+      "name": "Watch Wave",
+      "description": "ribbons of light, each a harmonic of the voice; they wind into a swirl to work",
+      "reference": "X",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 18,
+      "id": "watch-well",
+      "name": "Watch Well",
+      "description": "space bending into a well: ripples carry the voice, two masses circle it as it works",
+      "reference": "T",
+      "family": "cosmos",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 19,
+      "id": "watch-black-hole",
+      "name": "Watch Black hole",
+      "description": "a ring of light round a shadow: gas falls in to listen, a disk to think, jets to work",
+      "reference": "Y",
+      "family": "cosmos",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 20,
+      "id": "watch-accretion",
+      "name": "Watch Accretion",
+      "description": "a young star's disk of dust: it gathers into clumps to think and merges into planets to work",
+      "reference": "Z",
+      "family": "cosmos",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 21,
+      "id": "watch-face",
+      "name": "Watch Face",
+      "description": "a friendly face whose lips follow its voice; it cups its ear to listen",
+      "reference": "G",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbScenes.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 22,
+      "id": "watch-imprint",
+      "name": "Watch Imprint",
+      "description": "a face seen only where it touches a pane of glass; it presses in as it speaks",
+      "reference": "I",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbAvatars.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 23,
+      "id": "watch-contour",
+      "name": "Watch Contour",
+      "description": "a face raised in lines of light: its lips speak, the words leave them as waves along the lines",
+      "reference": "CT",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbLines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 24,
+      "id": "watch-membrane",
+      "name": "Watch Membrane",
+      "description": "a face pressing through a fabric of light: it presses closer with the voice and speaks through it",
+      "reference": "MB",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbLines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 25,
+      "id": "watch-aurora",
+      "name": "Watch Aurora",
+      "description": "the northern lights over a lake: they rise with the voice and gather into a corona to think",
+      "reference": "AU",
+      "family": "nature",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbNature.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 26,
+      "id": "watch-murmuration",
+      "name": "Watch Murmuration",
+      "description": "a flock of starlings at dusk: it swells to listen, spins to think, streams to work, draws the voice",
+      "reference": "MU",
+      "family": "nature",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbNature.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 27,
+      "id": "watch-eye",
+      "name": "Watch Eye",
+      "description": "one friendly eye: its iris glows with its voice, it opens wide to listen",
+      "reference": "K",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbAvatars.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 28,
+      "id": "watch-lens",
+      "name": "Watch Lens",
+      "description": "a glowing red camera eye; its core flares as it speaks",
+      "reference": "L",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 29,
+      "id": "watch-dome",
+      "name": "Watch Dome",
+      "description": "a dome-headed droid: it turns to face you, chatters with its lights, spins to think",
+      "reference": "M",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 30,
+      "id": "watch-valet",
+      "name": "Watch Valet",
+      "description": "a fussy gilded valet, stiff and proper: it frets as it thinks and talks with its hands",
+      "reference": "N",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 31,
+      "id": "watch-retro",
+      "name": "Watch Retro",
+      "description": "a gentle giant of the fifties, slow and deliberate: the works in its dome whirr as it thinks, neon tubes flicker as it talks",
+      "reference": "O",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 32,
+      "id": "watch-deco",
+      "name": "Watch Deco",
+      "description": "a serene art-deco machine woman, regal and unhurried, rings of light passing around her",
+      "reference": "P",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 33,
+      "id": "watch-rover",
+      "name": "Watch Rover",
+      "description": "a shy, curious little rover on tracks: its eyes lean in to listen, tilt when puzzled, bob when it talks",
+      "reference": "Q",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 34,
+      "id": "watch-hover",
+      "name": "Watch Hover",
+      "description": "a round floating robot, polite and brave: its red eyes glow with its voice, it drifts closer to listen",
+      "reference": "HV",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 35,
+      "id": "watch-spark",
+      "name": "Watch Spark",
+      "description": "a curious robot on tracks with shutter eyes: it leans in for input and its eyes flick while it thinks",
+      "reference": "SP",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 36,
+      "id": "watch-cruiser",
+      "name": "Watch Cruiser",
+      "description": "a sleek black car: its red scanner sweeps while it thinks, its dash lights up with its voice",
+      "reference": "CR",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 37,
+      "id": "watch-android",
+      "name": "Watch Android",
+      "description": "a pale gold android with amber eyes: a tilt of the head while it thinks, a precise blink",
+      "reference": "AN",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 38,
+      "id": "watch-sentinel",
+      "name": "Watch Sentinel",
+      "description": "a chrome sentinel helmet whose red eye sweeps side to side, faster as it thinks; it speaks in a low glow",
+      "reference": "CY",
+      "family": "machines",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 39,
+      "id": "watch-ocean",
+      "name": "Watch Ocean",
+      "description": "a sea at dusk whose swell rises with its voice; while it thinks the waves fall into order",
+      "reference": "H",
+      "family": "nature",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbScenes.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 40,
+      "id": "watch-shape-kitty",
+      "name": "Kitty silhouette",
+      "description": "A point-cloud cat with two ears, responding to activity and voice",
+      "reference": "shape:kitty",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 41,
+      "id": "watch-shape-face",
+      "name": "Face silhouette",
+      "description": "The original point-cloud smiling face silhouette",
+      "reference": "shape:face",
+      "family": "faces",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 42,
+      "id": "watch-shape-wave",
+      "name": "Wave silhouette",
+      "description": "The original planar point-cloud wave silhouette",
+      "reference": "shape:wave",
+      "family": "forms",
+      "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
+      "kind": "procedural-scene"
+    },
+    {
+      "code": 43,
+      "id": "iphone-weave",
+      "name": "Woven orb",
+      "description": "Five cords become a geodesic sphere or a raised approval hand",
+      "reference": "",
+      "family": "forms",
+      "source": "abstractassistant/phone/iphone/Sources/App/OrbWeave.swift",
+      "kind": "procedural-scene"
+    }
+  ]
+}

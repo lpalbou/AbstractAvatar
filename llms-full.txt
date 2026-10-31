@@ -1,0 +1,514 @@
+# AbstractAvatar
+
+> Shared procedural avatars for native, terminal and browser applications.
+
+## Document index
+
+- [README.md](README.md): Overview and first render
+- [docs/getting-started.md](docs/getting-started.md): Installation and native/browser use
+- [docs/architecture.md](docs/architecture.md): Shared generation and platform ownership
+- [docs/api.md](docs/api.md): Rust, Python, C and WebAssembly interfaces
+- [docs/frame-contract.md](docs/frame-contract.md): Bounded descriptors, RGBA pixels and lifecycle
+- [docs/catalog.md](docs/catalog.md): Style identifiers, activity and provenance
+- [docs/faq.md](docs/faq.md): Format and integration questions
+- [docs/troubleshooting.md](docs/troubleshooting.md): Setup, input and resource errors
+- [CONTRIBUTING.md](CONTRIBUTING.md): Development and compatibility
+- [SECURITY.md](SECURITY.md): Vulnerability reporting and trust boundaries
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): Contributor expectations
+- [LICENSE](LICENSE): MIT license
+- [CHANGELOG.md](CHANGELOG.md): User-visible changes
+- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md): Credits and design lineage
+
+---
+
+## README.md
+
+# AbstractAvatar
+
+AbstractAvatar generates procedural avatars from explicit activity state, time, audio level and
+gaze. One Rust implementation supplies terminal, browser and native applications with a common
+catalog and rendering behavior.
+
+Use it for an assistant portrait, an activity indicator or a procedural character that responds
+to your application's state. The host supplies state and presentation; AbstractAvatar generates
+the picture locally.
+
+![Procedural avatar catalog](docs/media/catalog.png)
+
+## Start with Python
+
+Build from the repository with Python 3.10+ and Rust 1.87+:
+
+```sh
+git clone https://github.com/lpalbou/AbstractAvatar.git
+cd AbstractAvatar
+python -m pip install .
+python -m abstractavatar catalog
+python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+```
+
+The Python distribution includes the compiled native library. A source installation builds it
+with Cargo. See [getting started](docs/getting-started.md) for library use and platform builds.
+
+## Integrate a player
+
+- **Rust:** create a `Frame` and map its material samples through your theme.
+- **Browser:** run the bundled WebAssembly generator and present RGBA pixels on Canvas.
+- **Python/native:** request RGBA pixels through the binding or the C interface and present them
+  with your UI toolkit.
+
+Store catalog style identifiers, rather than numeric indices. Supply time explicitly, stop
+animation while hidden, and use a static frame when reduced motion is enabled. Platform adapters
+do not need their own geometry implementations.
+
+The catalog includes shaded characters, particle orbs, forms, portraits, machines, nature scenes
+and a woven orb. [Catalog guidance](docs/catalog.md) explains source variants and stable keys.
+
+## Documentation
+
+[Documentation index](docs/README.md) · [Architecture](docs/architecture.md) ·
+[API](docs/api.md) · [Frame contract](docs/frame-contract.md) · [FAQ](docs/faq.md) ·
+[Troubleshooting](docs/troubleshooting.md) · [Contributing](CONTRIBUTING.md) ·
+[Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+
+## For AI agents
+
+Use the [AbstractAvatar skill](skills/abstractavatar/SKILL.md) for the rendering workflow,
+descriptor constraints and platform integration rules. The [LLM index](llms.txt) maps the public
+documentation.
+
+---
+
+## docs/getting-started.md
+
+# Getting started
+
+AbstractAvatar generates images locally. Rust 1.87+ builds the native library; Python 3.10+ runs
+the Python API and preview command.
+
+## Install from source
+
+From the cloned repository:
+
+```sh
+python -m pip install .
+python -m abstractavatar catalog
+python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+```
+
+Choose a style key from the catalog output. PNG previews use the same procedural generator as
+live integrations; they capture one explicit time and state.
+
+## Present native frames
+
+```python
+from abstractavatar import Renderer
+
+with Renderer(width=128, height=128) as renderer:
+    pixels = renderer.render(style="halo", state="speaking", level=0.6, time=1.2)
+    assert len(pixels) == 128 * 128 * 4
+```
+
+`pixels` contains tightly packed RGBA bytes. Your UI toolkit owns the image object and draw loop.
+See [the frame contract](frame-contract.md) for dimensions, ownership and reduced motion.
+
+## Use Rust
+
+```rust
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze};
+
+let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let sample = frame.sample(0.2, -0.1);
+```
+
+The sample carries material, light and coverage; map these through your theme. Build one frame
+per state/time combination and sample it across the image, rather than reconstructing it for
+every pixel.
+
+## Build for browsers
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo build --release --features ffi --target wasm32-unknown-unknown
+```
+
+The WebAssembly artifact uses the same generator. A browser adapter supplies palette values and
+copies RGBA pixels into Canvas. WebAssembly execution requires no geometry interpreter written
+in JavaScript. See [API](api.md), [architecture](architecture.md) and
+[troubleshooting](troubleshooting.md).
+
+---
+
+## docs/architecture.md
+
+# Architecture
+
+AbstractAvatar owns the catalog and deterministic procedural generation. Hosts own activity
+signals, preferences, palette, scheduling and presentation.
+
+```mermaid
+flowchart LR
+    I[Style and explicit state/time/audio/gaze] --> G[AbstractAvatar Rust generator]
+    G --> R[Material samples or RGBA frames]
+    G --> W[Same generator compiled to WebAssembly]
+    R --> T[Terminal frame player]
+    R --> N[Native image presenter]
+    W --> C[Canvas presenter]
+    H[Host visibility, motion preference and clock] --> T
+    H --> N
+    H --> C
+```
+
+The [descriptor](frame-contract.md) selects built-in generation; it does not introduce a new
+programming language. Native and WebAssembly builds run the same algorithms. Platform-specific
+presenters translate frames into terminal cells, a canvas image or a native image object.
+
+Core generation has no network, microphone, model, timer, global mouse listener or UI-framework
+dependency. Gaze and audio levels are inputs supplied by the host. Keeping those responsibilities
+explicit lets multiple applications present the same design without sharing application state.
+
+Rendered frames use standard RGBA channel ordering. PNG is used for portable still-image
+previews. WebAssembly is the browser execution format; it is not an avatar scene-file format.
+The supported formats and limits are specified in [the frame contract](frame-contract.md).
+
+Applications persist stable style keys and resolve numeric ABI codes from the runtime catalog.
+See [catalog](catalog.md) and [ADR 0001](adr/0001-portable-procedural-generation.md).
+
+---
+
+## docs/api.md
+
+# API
+
+## Python
+
+`Renderer(width=128, height=128, library_path=None)` owns one bounded native rendering handle.
+Use it as a context manager or call `close()` when its host is disposed.
+
+`render(style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True)`
+returns owned RGBA bytes. Store keys from `catalog()`, and use the named activity states listed
+in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
+normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
+normalized audio-band levels. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
+RGB color anchors and an RGBA background; the host retains theme ownership.
+
+`render_descriptor()` consumes the bounded parameter object described in
+[the frame contract](frame-contract.md). It does not load files, URLs or executable content
+specified by that object.
+
+## Rust
+
+`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
+activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
+`Frame::sample(x, y)` returns material/light/coverage in centered coordinates, with y downward.
+
+The `ffi` feature supplies the native C/WebAssembly adapter. Geometry remains usable without a
+UI toolkit. The optional descriptor feature parses the versioned parameter object.
+
+## Native and WebAssembly
+
+[`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
+create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
+
+`avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
+use it for native integrations. The legacy borrowed-pointer functions require caller synchronization.
+Native callers must follow [the frame contract](frame-contract.md). Browser adapters copy pixels from WebAssembly memory
+before reusing or destroying the handle. Do not persist numeric catalog codes or native handles.
+
+The UI toolkit and application remain outside the ABI. A host supplies a frame cadence and
+activity state; the generator returns a picture.
+
+---
+
+## docs/frame-contract.md
+
+# Frame contract
+
+## Parameter descriptor
+
+A versioned JSON object describes a frame request:
+
+```json
+{
+  "schema_version": 1,
+  "style": "halo",
+  "state": "speaking",
+  "time": 1.2,
+  "level": 0.6,
+  "gaze": [0.0, 0.0]
+}
+```
+
+A machine-readable [JSON Schema](../schema/descriptor.schema.json) defines the fields. Optional
+`bands` contains exactly eight normalized audio-band levels; omitting it uses the scalar level.
+The descriptor names trusted built-in generation. It contains no code, shader source, file path,
+URL or library name. Unsupported versions, styles, states and fields are explicit errors.
+Dimensions and palette are supplied by the renderer/host, outside the descriptor.
+
+Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
+from -1 to 1. Numeric values must be finite; a JSON descriptor is limited to 4096 UTF-8 bytes. Runtime adapters
+should use a local elapsed clock, not an absolute epoch timestamp.
+
+## Raster layout
+
+- RGBA8: four bytes per pixel in red, green, blue, alpha order.
+- Rows are tightly packed with stride `width * 4`, top to bottom.
+- A frame contains exactly `width * height * 4` bytes.
+- Each dimension is between 1 and 512 inclusive; at most 16 native handles can be live.
+- Transparent output carries alpha; the host chooses its background and palette.
+
+RGBA is a pixel layout, not a new media container. [PNG](https://www.w3.org/TR/png/) provides the
+portable file representation for previews. The tiny descriptor is an AbstractAvatar contract;
+it is not claimed to be a general procedural-media standard.
+
+## Lifetime and scheduling
+
+A renderer owns its handle and fixed frame buffer. Copy pixels into an owned image before
+reusing or destroying that buffer. Native callers synchronize access across render, copy,
+palette updates and destruction; the Python wrapper handles that boundary.
+
+One visible view should reuse one renderer. Do not allocate a renderer for every animation
+frame. Close on disposal, stop clocks while hidden, and present a static frame for reduced
+motion. Expire pointer-derived gaze after inactivity rather than installing global listeners.
+
+The host chooses the frame rate. The pose API provides bounded cadence suggestions: quiet
+states need fewer frames than speaking or working states. A frame request does no background
+work after it returns.
+
+## Browser execution
+
+[WebAssembly](https://webassembly.github.io/spec/core/intro/introduction.html) executes the shared
+generator in the browser. Load a trusted bundled artifact, verify its ABI/catalog/memory
+requirements, and give it no ambient host imports. Descriptors must never choose arbitrary
+modules. The browser presenter only schedules and presents frames.
+
+---
+
+## docs/catalog.md
+
+# Catalog and activity
+
+`catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
+stable style key, display name, description, family and source reference. `catalog.json` records
+the design provenance.
+
+The catalog preserves shaded terminal characters separately from particle designs whose names
+overlap. For example, a shaded Halo and the Watch Halo remain separate choices. Existing
+`halo`, `hover`, `vortex`, `eclipse`, `eye` and `rover` keys keep their meaning; Apple-inspired
+variants use their own keys.
+
+Families include orbs, forms, cosmic scenes, portraits, machines, nature and the iPhone weave.
+Additional point-body shapes are distinct from the similarly named portrait/form scenes.
+Platform sampling and palette can affect appearance; the shared generator supplies the geometry
+and motion. The source Apple applications retain their own implementations until separately
+integrated.
+
+## Activity states
+
+| State | Typical host condition |
+|---|---|
+| ready | Idle and available |
+| thinking | Reasoning or preparing a response |
+| working | Executing an operation |
+| listening | Accepting audio/input |
+| speaking | Presenting speech/output |
+| waiting | Waiting for an answer or approval |
+| error | An operation failed |
+
+The application decides the state. AbstractAvatar does not infer it from a connection, model or
+microphone. Audio level and optional gaze add visual input to the selected state.
+
+Persist keys, not a display name or array index. Query the installed catalog rather than assuming
+a fixed number or ordering beyond the documented compatibility prefix. See [API](api.md) and
+[frame contract](frame-contract.md).
+
+---
+
+## docs/faq.md
+
+# Frequently asked questions
+
+## Does each platform need its own procedural interpreter?
+
+No. Native hosts call the compiled library; browsers run the same generator compiled to
+WebAssembly. Platform presenters display the frames and own the clock, palette and input state.
+See [architecture](architecture.md).
+
+## Is this a standard animation-file format?
+
+The request descriptor is a small AbstractAvatar parameter contract. Frames use RGBA pixels and
+PNG previews; WebAssembly supplies portable execution. It is not an arbitrary animation-file
+loader. See [the frame contract](frame-contract.md).
+
+## Does rendering need an AI model, microphone or server?
+
+No. Your application supplies activity and optional audio levels. Generation is local and does
+not capture audio or make network requests.
+
+## Must a general-purpose TUI depend on avatars?
+
+No. A generic frame player can present application-supplied frames independently. Applications
+opt into an avatar source when they want one.
+
+## Are all source clients automatically migrated?
+
+No. The shared catalog and generator are reusable independently of client adoption. Watch and
+iPhone implementations remain separate until explicitly integrated. See [catalog](catalog.md).
+
+---
+
+## docs/troubleshooting.md
+
+# Troubleshooting
+
+## The native library cannot be loaded
+
+Install a built wheel for your platform, or build from source with Rust 1.87+ and
+`python -m pip install .`. A source checkout alone does not include a compiled native library.
+Use `library_path` only for a trusted explicit build. See [getting started](getting-started.md).
+
+## A style or descriptor is rejected
+
+Run `python -m abstractavatar catalog` and use a supported stable key. Check schema version,
+state, finite numeric values and unknown fields against [the frame contract](frame-contract.md).
+Do not pass file paths, URLs or shader code as a descriptor.
+
+## Frames are empty or look stretched
+
+Confirm width/height, tightly packed RGBA channel order and image stride. Keep the intended
+aspect ratio; use a transparent image over your UI's background. Verify the palette is populated
+when using the low-level C interface. See [API](api.md).
+
+## The renderer refuses another handle
+
+Reuse a renderer across frames and close renderers belonging to disposed views. Galleries
+should create only the visible presenters, or render preview images sequentially. Do not keep
+one live renderer for every off-screen catalog entry.
+
+## Animation uses CPU while hidden
+
+Stop the host's frame clock when the view is hidden or reduced motion applies. The library has
+no background animation thread. A static error/idle picture does not need a continuous redraw.
+See [lifetime and scheduling](frame-contract.md#lifetime-and-scheduling).
+
+---
+
+## CONTRIBUTING.md
+
+# Contributing
+
+Use Rust 1.87+ and Python 3.10+. Build the library before trying its native integrations:
+
+```sh
+cargo test
+cargo test --all-features
+cargo build --release --features ffi
+python -m pip install .
+```
+
+Keep procedural geometry in the shared Rust implementation. UI-specific clocks, preferences,
+colors, focus and input capture belong in the host. New styles need distinct visual behavior,
+source attribution, valid catalog metadata and examples of all supported activity states.
+
+Preserve existing style keys and the published ABI contract. Add rather than repurpose catalog
+entries. Changes to ownership or frame semantics belong in [architecture decisions](docs/adr/0001-portable-procedural-generation.md).
+
+Document public API changes in [the API reference](docs/api.md) and [changelog](CHANGELOG.md).
+Keep documentation indexes current with `python scripts/docs.py`; `python scripts/docs.py --check`
+checks freshness without writing files.
+
+Report security concerns using [SECURITY.md](SECURITY.md).
+
+---
+
+## SECURITY.md
+
+# Security
+
+Report suspected vulnerabilities privately to contact@abstractframework.ai. Include the affected
+version, platform, input and a minimal reproduction. Avoid posting private application data or
+an uncoordinated exploit in a public issue.
+
+AbstractAvatar renders trusted built-in procedural designs. Descriptors are bounded parameters,
+not scripts or arbitrary plug-ins. Use the bundled native library or WebAssembly artifact from a
+trusted build. Do not load native libraries or WebAssembly supplied by an untrusted descriptor.
+
+Hosts remain responsible for validating incoming application messages, controlling frame cadence,
+and releasing renderer resources. The native API is a trusted in-process FFI boundary; callers
+must obey buffer and synchronization requirements in [the frame contract](docs/frame-contract.md).
+
+See [troubleshooting](docs/troubleshooting.md) for input and resource-limit errors.
+
+---
+
+## CODE_OF_CONDUCT.md
+
+# Code of Conduct
+
+Treat contributors and users respectfully. Discuss ideas and evidence, welcome different levels
+of experience, and give actionable feedback. Harassment, threats, discrimination and disclosure
+of another person's private information are unacceptable.
+
+Report conduct concerns privately to contact@abstractframework.ai. Maintainers may moderate or
+remove participation that violates these expectations and will handle reports with discretion.
+
+---
+
+## LICENSE
+
+MIT License
+
+Copyright (c) 2026 Laurent-Philippe Albou <contact@abstractframework.ai>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## CHANGELOG.md
+
+# Changelog
+
+## Unreleased
+
+### Added
+
+- Shared procedural avatar catalog with explicit activity states, audio level, time and gaze.
+- Rust sampling API, native C interface and browser WebAssembly build.
+- Python rendering API and PNG-preview command.
+- Versioned parameter descriptor and bounded raster frame contract.
+
+### Compatibility
+
+- The six shaded style identifiers and their first six ABI catalog codes retain their ordering.
+- Persist style keys. Numeric catalog codes are resolved at runtime and are not preference values.
+
+---
+
+## ACKNOWLEDGEMENTS.md
+
+# Acknowledgements
+
+AbstractAvatar is part of AbstractFramework, created by Laurent-Philippe Albou.
+
+The procedural catalog draws on the AbstractAssistant Apple Watch and iPhone artwork and the
+AbstractTUI shaded activity avatars. Those implementations provide the design vocabulary and
+provenance described in the [catalog](docs/catalog.md).
+
+WebAssembly supplies the portable browser execution format. Python, Rust and platform UI toolkits
+provide the integration surfaces. No machine-learning model is needed to render the catalog.

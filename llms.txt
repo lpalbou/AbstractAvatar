@@ -1,0 +1,30 @@
+# AbstractAvatar
+
+> Shared procedural avatars for native, terminal and browser applications.
+
+## Core documentation
+
+- [README.md](README.md): Overview and first render
+- [docs/getting-started.md](docs/getting-started.md): Installation and native/browser use
+- [docs/architecture.md](docs/architecture.md): Shared generation and platform ownership
+- [docs/api.md](docs/api.md): Rust, Python, C and WebAssembly interfaces
+- [docs/frame-contract.md](docs/frame-contract.md): Bounded descriptors, RGBA pixels and lifecycle
+- [docs/catalog.md](docs/catalog.md): Style identifiers, activity and provenance
+- [docs/faq.md](docs/faq.md): Format and integration questions
+- [docs/troubleshooting.md](docs/troubleshooting.md): Setup, input and resource errors
+
+## Contributing
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): Development and compatibility
+- [SECURITY.md](SECURITY.md): Vulnerability reporting and trust boundaries
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): Contributor expectations
+- [LICENSE](LICENSE): MIT license
+
+## Agent skill
+
+- [AbstractAvatar](skills/abstractavatar/SKILL.md): safe rendering and integration workflow
+
+## Optional
+
+- [CHANGELOG.md](CHANGELOG.md): User-visible changes
+- [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md): Credits and design lineage
