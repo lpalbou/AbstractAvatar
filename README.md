@@ -1,6 +1,7 @@
 # AbstractAvatar
 
 [![crates.io](https://img.shields.io/crates/v/abstractavatar.svg)](https://crates.io/crates/abstractavatar)
+[![PyPI](https://img.shields.io/pypi/v/abstractavatar.svg)](https://pypi.org/project/abstractavatar/)
 [![docs.rs](https://img.shields.io/docsrs/abstractavatar)](https://docs.rs/abstractavatar)
 [![CI](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml)
 
@@ -14,8 +15,8 @@ the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
 
-**What's new in 0.1.0:** the first release of the `abstractavatar` crate. See the
-[changelog](CHANGELOG.md#010---2026-11-02).
+**What's new in 0.1.0:** the first release, as the `abstractavatar` crate on crates.io and the
+`abstractavatar` Python distribution on PyPI. See the [changelog](CHANGELOG.md#010---2026-11-02).
 
 ## Start with Rust
 
@@ -38,18 +39,17 @@ parameter descriptor.
 
 ## Start with Python
 
-Build from the repository with Python 3.10+ and Rust 1.87+:
+Install from PyPI with Python 3.10+:
 
 ```sh
-git clone https://github.com/lpalbou/AbstractAvatar.git
-cd AbstractAvatar
-python -m pip install .
+python -m pip install abstractavatar
 python -m abstractavatar catalog
 python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
 
-The Python distribution includes the compiled native library. A source installation builds it
-with Cargo. See [getting started](docs/getting-started.md) for library use and platform builds.
+Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. On other platforms pip builds the
+library from the source distribution, which needs Rust 1.87+. To build from a checkout, run
+`python -m pip install .` in the cloned repository. See [getting started](docs/getting-started.md) for library use and platform builds.
 
 ## Integrate a player
 

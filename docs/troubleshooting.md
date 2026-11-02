@@ -2,8 +2,9 @@
 
 ## The native library cannot be loaded
 
-Install a built wheel for your platform, or build from source with Rust 1.87+ and
-`python -m pip install .`. A source checkout alone does not include a compiled native library.
+Install the published wheel with `python -m pip install abstractavatar`, or build from source with
+Rust 1.87+ and `python -m pip install .`. A source checkout alone does not include a compiled
+native library.
 Use `library_path` only for a trusted explicit build. See [getting started](getting-started.md).
 
 ## A style or descriptor is rejected

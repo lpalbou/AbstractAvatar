@@ -3,15 +3,17 @@
 AbstractAvatar generates images locally. Rust 1.87+ builds the native library; Python 3.10+ runs
 the Python API and preview command.
 
-## Install from source
-
-From the cloned repository:
+## Install the Python package
 
 ```sh
-python -m pip install .
+python -m pip install abstractavatar
 python -m abstractavatar catalog
 python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
+
+Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. Elsewhere pip builds it from the
+source distribution with Rust 1.87+. From a cloned repository, `python -m pip install .` builds
+and installs your checkout.
 
 Choose a style key from the catalog output. PNG previews use the same procedural generator as
 live integrations; they capture one explicit time and state.
