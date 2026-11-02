@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
+from pathlib import Path
 import unittest
 
 from abstractavatar import Renderer, catalog, validate_descriptor
@@ -30,6 +31,19 @@ class NativeTests(unittest.TestCase):
         self.assertEqual(len({d["id"] for d in designs}), 44)
         self.assertEqual(sum(d["id"].startswith("watch-") and not d["id"].startswith("watch-shape-") for d in designs), 34)
         self.assertTrue({"watch-shape-kitty", "watch-shape-face", "watch-shape-wave", "iphone-weave"} <= {d["id"] for d in designs})
+
+    def test_gaze_moves_only_eyes_designs_and_catalog_json_agrees(self):
+        designs = catalog()
+        shipped = json.loads((Path(__file__).resolve().parents[1] / "catalog.json").read_text())["designs"]
+        self.assertEqual({d["id"]: d["gaze"] for d in designs}, {d["id"]: d["gaze"] for d in shipped})
+        self.assertTrue({"hover", "watch-hover", "rover", "watch-rover"} <= {d["id"] for d in designs if d["gaze"] == "eyes"})
+        self.assertTrue({"halo", "watch-halo", "vortex", "eclipse"} <= {d["id"] for d in designs if d["gaze"] == "none"})
+        with Renderer(64, 64) as renderer:
+            for design in designs:
+                rest = renderer.render(design["id"], "ready", .6, 1.1)
+                looked = renderer.render(design["id"], "ready", .6, 1.1, gaze=(1, -1))
+                (self.assertNotEqual if design["gaze"] == "eyes" else self.assertEqual)(rest, looked, design["id"])
+                self.assertEqual(renderer.render(design["id"], "speaking", .6, 1.1), renderer.render(design["id"], "speaking", .6, 1.1, gaze=(1, -1)), design["id"])
 
     def test_every_design_renders_all_states_and_errors_are_static(self):
         with Renderer(48, 48) as renderer:

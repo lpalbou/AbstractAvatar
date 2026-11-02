@@ -22,8 +22,24 @@ URL or library name. Unsupported versions, styles, states and fields are explici
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
-from -1 to 1. Numeric values must be finite; a JSON descriptor is limited to 4096 UTF-8 bytes. Runtime adapters
+from -1 to 1 (see [Gaze](#gaze)). Numeric values must be finite; a JSON descriptor is limited to 4096 UTF-8 bytes. Runtime adapters
 should use a local elapsed clock, not an absolute epoch timestamp.
+
+## Gaze
+
+Gaze moves eyes only. Each catalog design declares a `gaze` component:
+
+| `gaze` | Designs | Effect of a gaze input |
+|---|---|---|
+| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (for example `hover`, `rover`, `eye`, `watch-hover`, `watch-rover`, `watch-face`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
+| `none` | Orbs, forms, cosmic scenes, nature scenes, silhouettes, the woven orb and machines without looking eyes | Ignored. The frame is identical with or without gaze. |
+
+Gaze applies in the `ready` state; every other state ignores it so that activity motion stays
+readable. The generator is stateless and frames are a pure function of their inputs, so temporal
+smoothing belongs to the host: ease the gaze value toward the pointer (for example exponential
+smoothing over about 150 ms), send gaze only for designs whose `gaze` is `eyes`, and return it to
+`[0, 0]` after inactivity. Read the component from the installed catalog rather than hardcoding a
+list.
 
 ## Raster layout
 

@@ -2,7 +2,21 @@
 
 ## Unreleased
 
+### Changed
+
+- Gaze moves eyes only. Each catalog design declares a `gaze` component: `"eyes"` for the 14
+  designs that draw distinct eyes (`hover`, `eye`, `rover`, `watch-face`, `watch-eye`,
+  `watch-lens`, `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-rover`,
+  `watch-hover`, `watch-spark`, `watch-android`) and `"none"` for every other design. A gaze
+  input shifts only the pupils, irises or eye lamps of `eyes` designs, by at most
+  `GAZE_REACH` (0.05 of the avatar radius horizontally, 0.025 vertically), in the ready state.
+  Orbs, forms and every `none` design no longer translate toward the gaze; their frames are
+  identical with or without it.
+
 ### Added
+
+- `AvatarStyle::gaze()` and `GAZE_REACH` in Rust, catalog field 5 (`gaze`) in the C/WebAssembly
+  ABI, a `gaze` key in Python `catalog()` records and in `catalog.json`.
 
 - PyPI release lane: a release workflow builds the `abstractavatar` Python sdist and wheels for
   Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64, and publishes

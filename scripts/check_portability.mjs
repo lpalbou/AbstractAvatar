@@ -17,6 +17,7 @@ for (const size of new Set(manifest.cases.map(c => c.size))) {
       assert.equal(core.avatar_set_shade(handle, material, shade, rgba), 0)));
     assert.equal(core.avatar_set_bands(handle, .1,.2,.3,.4,.5,.6,.7,.8), 0);
     for (const item of manifest.cases.filter(c => c.size === size)) {
+      assert.equal(core.avatar_set_gaze(handle, item.gaze[0], item.gaze[1]), 0);
       assert.equal(core.avatar_render(handle, item.style, item.pose, .6, 1.1, 1), 0);
       const length = core.avatar_pixels_len(handle);
       assert.equal(length, size * size * 4);

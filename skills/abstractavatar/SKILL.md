@@ -35,6 +35,9 @@ WebAssembly exports, and `json` adds the versioned descriptor.
 - Style keys identify designs; store keys, not display names or numeric catalog codes.
 - States are `ready`, `thinking`, `working`, `listening`, `speaking`, `waiting`, `error`.
 - Inputs are explicit. Time is finite elapsed seconds, level is 0..1, gaze is two values in -1..1.
+- Gaze moves eyes only: catalog `gaze` is `eyes` (pupils/irises/eye lamps shift a few percent while
+  `ready`) or `none` (gaze ignored). Never move or tilt the whole avatar toward a pointer; ease gaze
+  host-side and send it only to `eyes` designs.
 - Frames are tightly packed RGBA8: width × height × 4 bytes, top-to-bottom rows.
 - A renderer owns a reusable native handle; close it. Dimensions are 1..512 and live handles are bounded.
 - The host controls palette, cadence and visibility. Hidden/reduced-motion views do not run animation clocks.

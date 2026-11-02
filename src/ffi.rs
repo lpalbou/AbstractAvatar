@@ -40,13 +40,13 @@ pub extern "C" fn avatar_style_count() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn avatar_style_field_ptr(style: u32, field: u32) -> *const u8 {
     AvatarStyle::from_code(style)
-        .and_then(|s| s.fields().get(field as usize).copied())
+        .and_then(|s| s.field(field))
         .map_or(std::ptr::null(), |s| s.as_ptr())
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn avatar_style_field_len(style: u32, field: u32) -> usize {
     AvatarStyle::from_code(style)
-        .and_then(|s| s.fields().get(field as usize).copied())
+        .and_then(|s| s.field(field))
         .map_or(0, |s| s.len())
 }
 #[unsafe(no_mangle)]

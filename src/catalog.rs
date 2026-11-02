@@ -119,6 +119,44 @@ impl AvatarStyle {
     pub fn family(self) -> &'static str {
         self.fields()[4]
     }
+    /// The one component that may follow a host-supplied gaze: `"eyes"` or `"none"`.
+    ///
+    /// Only designs that draw distinct eyes (pupils, irises or eye lamps) answer gaze,
+    /// and only by shifting those eyes; every other design ignores it entirely.
+    pub fn gaze(self) -> &'static str {
+        if self.follows_gaze() {
+            "eyes"
+        } else {
+            "none"
+        }
+    }
+    pub(crate) fn follows_gaze(self) -> bool {
+        matches!(
+            self,
+            Self::Hover
+                | Self::Eye
+                | Self::Rover
+                | Self::WatchFace
+                | Self::WatchEye
+                | Self::WatchLens
+                | Self::WatchDome
+                | Self::WatchValet
+                | Self::WatchRetro
+                | Self::WatchDeco
+                | Self::WatchRover
+                | Self::WatchHover
+                | Self::WatchSpark
+                | Self::WatchAndroid
+        )
+    }
+    /// Catalog field by ABI index: 0..4 as in [`Self::fields`], then 5 = [`Self::gaze`].
+    #[cfg(feature = "ffi")]
+    pub(crate) fn field(self, index: u32) -> Option<&'static str> {
+        match index {
+            5 => Some(self.gaze()),
+            _ => self.fields().get(index as usize).copied(),
+        }
+    }
     pub fn fields(self) -> [&'static str; 5] {
         match self{
         Self::Halo => ["halo", "Halo orb", "A luminous corona", "A", "orbs"],

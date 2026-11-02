@@ -28,7 +28,9 @@ color blending. Rust presenters can use `Frame::rgba` with the same palette ramp
 See [rendering](rendering.md).
 
 Core generation has no network, microphone, model, timer, global mouse listener or UI-framework
-dependency. Gaze and audio levels are inputs supplied by the host. Keeping those responsibilities
+dependency. Gaze and audio levels are inputs supplied by the host. Gaze moves only the eyes of
+designs whose catalog `gaze` component is `eyes`, by a bounded offset; it never moves, tilts or
+offsets a body, sphere or scene, and the host owns its smoothing. Keeping those responsibilities
 explicit lets multiple applications present the same design without sharing application state.
 
 Rendered frames use standard RGBA channel ordering. PNG is used for portable still-image
