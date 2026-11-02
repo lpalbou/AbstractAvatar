@@ -576,6 +576,42 @@ It exercises every style/state at 64 pixels plus the focused particle, ribbon an
 designs at 32 and 128 pixels, including partial material alpha and eight voice bands.
 Visual review still matters: pixel agreement establishes portability, not design fidelity.
 
+## Releases
+
+A release publishes one version on two registries:
+
+- **crates.io** (`abstractavatar` crate): published by the maintainer from a local checkout with
+  `cargo publish`. The release workflow does not publish the crate.
+- **PyPI** (`abstractavatar` distribution): published by
+  [`.github/workflows/release.yml`](.github/workflows/release.yml), which builds an sdist and
+  wheels for Linux x86_64/aarch64 (manylinux), macOS arm64/x86_64 and Windows x86_64.
+
+The version in `Cargo.toml`, `pyproject.toml` and `python/abstractavatar/__init__.py` must be
+equal and `CHANGELOG.md` must have a dated `## [X.Y.Z] - YYYY-MM-DD` section; the workflow
+refuses to publish otherwise. It also refuses a version already on PyPI or not yet on crates.io.
+Release in this order:
+
+1. Bump the three version sources, fold `Unreleased` into the dated changelog section, commit and
+   push to `main`, and wait for CI to pass.
+2. Publish the crate: `cargo publish --locked`.
+3. Push the annotated tag: `git tag -a vX.Y.Z -m "abstractavatar X.Y.Z" && git push origin vX.Y.Z`.
+   The tag push builds, publishes to PyPI and creates the GitHub Release.
+
+You can also start the PyPI lane from `main` by hand. Without `publish=true` the run only builds
+and tests the distributions:
+
+```sh
+gh workflow run release.yml --ref main -f version=X.Y.Z -f publish=true \
+  -f publish_confirmation=publish-abstractavatar-X.Y.Z
+```
+
+A dispatched run builds the commit of `vX.Y.Z` when that tag exists; otherwise it builds the
+`main` commit and creates the tag once the build passes.
+
+PyPI publishing uses trusted publishing, with no stored token. The PyPI project needs a trusted
+publisher with project name `abstractavatar`, owner `lpalbou`, repository `AbstractAvatar`,
+workflow file `release.yml` and environment `pypi`.
+
 Report security concerns using [SECURITY.md](SECURITY.md).
 
 ---
@@ -642,6 +678,16 @@ SOFTWARE.
 ## CHANGELOG.md
 
 # Changelog
+
+## Unreleased
+
+### Added
+
+- PyPI release lane: a release workflow builds the `abstractavatar` Python sdist and wheels for
+  Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64, and publishes
+  them to PyPI through trusted publishing. Wheels bundle the native library and serve Python
+  3.10+. Version 0.1.0 is published to PyPI from the `v0.1.0` release source, so the crate and
+  the Python distribution carry the same version.
 
 ## [0.1.0] - 2026-11-02
 

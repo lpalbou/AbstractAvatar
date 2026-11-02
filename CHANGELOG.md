@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- PyPI release lane: a release workflow builds the `abstractavatar` Python sdist and wheels for
+  Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64, and publishes
+  them to PyPI through trusted publishing. Wheels bundle the native library and serve Python
+  3.10+. Version 0.1.0 is published to PyPI from the `v0.1.0` release source, so the crate and
+  the Python distribution carry the same version.
+
 ## [0.1.0] - 2026-11-02
 
 First release of the `abstractavatar` crate on crates.io. AbstractAvatar is a local procedural

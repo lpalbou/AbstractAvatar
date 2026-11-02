@@ -1,0 +1,310 @@
+# Release pipeline for the `abstractavatar` Python distribution (PyPI).
+#
+# Lanes:
+#   - Rust crate `abstractavatar` (crates.io): published locally by the
+#     maintainer with `cargo publish`, BEFORE the release tag is pushed.
+#     This workflow never publishes the crate; when it publishes to PyPI it
+#     requires the same version to be on crates.io already, so the crate and
+#     the wheels always carry one version.
+#   - Python distribution `abstractavatar` (PyPI): this workflow. One sdist
+#     plus platform wheels (Linux x86_64/aarch64 manylinux, macOS arm64/x86_64,
+#     Windows x86_64). The wheels bundle the native library built from the
+#     same Rust sources and are tagged py3-none-<platform>, so one wheel per
+#     platform serves every supported Python (3.10+).
+#
+# Triggers:
+#   - push of a vX.Y.Z tag: verify -> build -> publish to PyPI -> GitHub Release.
+#   - workflow_dispatch: verify and build only (a rehearsal) unless
+#     publish=true AND publish_confirmation=publish-abstractavatar-<version>.
+#     A dispatch builds the commit of the existing tag vX.Y.Z when that tag
+#     exists; otherwise it builds the dispatched main commit and creates the
+#     annotated tag after the build passes.
+#
+# AUTH: PyPI Trusted Publishing (OIDC). The PyPI publisher entry is keyed to
+# project abstractavatar, owner lpalbou, repository AbstractAvatar, workflow
+# release.yml and environment pypi. No PyPI token is stored in GitHub.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, with or without the leading v (example: 0.1.1)"
+        required: true
+        type: string
+      publish:
+        description: "Publish to PyPI and create the GitHub Release (otherwise build only)"
+        required: true
+        type: boolean
+        default: false
+      publish_confirmation:
+        description: "Required only when publish=true: publish-abstractavatar-<version>"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Validate version, changelog, tag and publish guard
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.release-meta.outputs.version }}
+      tag: ${{ steps.release-meta.outputs.tag }}
+      sha: ${{ steps.release-meta.outputs.sha }}
+      tag_exists: ${{ steps.release-meta.outputs.tag_exists }}
+      should_publish: ${{ steps.release-meta.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Validate release metadata
+        id: release-meta
+        env:
+          RELEASE_INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_PUBLISH: ${{ inputs.publish }}
+          RELEASE_CONFIRMATION: ${{ inputs.publish_confirmation || '' }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import tomllib
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True).strip()
+
+          event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+          raw_version = os.environ.get("RELEASE_INPUT_VERSION", "").strip() or os.environ.get("GITHUB_REF_NAME", "").strip()
+          version = raw_version[1:] if raw_version.startswith("v") else raw_version
+          if not re.fullmatch(r"\d+\.\d+\.\d+(?:[a-zA-Z0-9.-]+)?", version):
+              raise SystemExit(f"Invalid release version: {raw_version!r}")
+          tag = f"v{version}"
+
+          tag_check = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"], capture_output=True, text=True)
+          tag_exists = tag_check.returncode == 0
+          if event_name == "push":
+              sha = os.environ["GITHUB_SHA"]
+          elif tag_exists:
+              sha = tag_check.stdout.strip()
+          else:
+              sha = git("rev-parse", "HEAD")
+
+          def source(path):
+              return git("show", f"{sha}:{path}")
+
+          cargo_version = tomllib.loads(source("Cargo.toml"))["package"]["version"]
+          pyproject_version = tomllib.loads(source("pyproject.toml"))["project"]["version"]
+          module = re.search(r'^__version__ = "([^"]+)"$', source("python/abstractavatar/__init__.py"), re.MULTILINE)
+          versions = {"Cargo.toml": cargo_version, "pyproject.toml": pyproject_version, "python/abstractavatar/__init__.py": module.group(1) if module else None}
+          mismatched = {name: found for name, found in versions.items() if found != version}
+          if mismatched:
+              raise SystemExit(f"Release version {version} does not match {mismatched} at {sha}")
+
+          changelog = source("CHANGELOG.md")
+          header = re.search(rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.MULTILINE)
+          if not header:
+              raise SystemExit(f"CHANGELOG.md at {sha} has no dated entry for {version}")
+          rest = changelog[header.end():]
+          next_header = re.search(r"^## \[", rest, re.MULTILINE)
+          notes = rest[: next_header.start() if next_header else len(rest)].strip()
+          if not notes:
+              raise SystemExit(f"CHANGELOG.md entry for {version} is empty")
+          Path("release-notes.md").write_text(notes + "\n", encoding="utf-8")
+
+          publish = event_name == "push" or os.environ.get("RELEASE_PUBLISH", "").lower() == "true"
+          if publish:
+              if event_name == "workflow_dispatch":
+                  if os.environ.get("GITHUB_REF") != "refs/heads/main":
+                      raise SystemExit("Publishing by dispatch is only allowed from the main branch.")
+                  expected = f"publish-abstractavatar-{version}"
+                  confirmation = os.environ.get("RELEASE_CONFIRMATION", "").strip()
+                  if confirmation != expected:
+                      raise SystemExit(f"publish_confirmation must be exactly {expected!r}; got {confirmation!r}")
+
+              headers = {"User-Agent": "abstractavatar-release-workflow (https://github.com/lpalbou/AbstractAvatar)"}
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(f"https://pypi.org/pypi/abstractavatar/{version}/json", headers=headers), timeout=20) as response:
+                      json.load(response)
+                  raise SystemExit(f"PyPI already has abstractavatar {version}.")
+              except urllib.error.HTTPError as exc:
+                  if exc.code != 404:
+                      raise
+
+              # The crate is published locally first; the wheels must carry the same version.
+              with urllib.request.urlopen(urllib.request.Request("https://crates.io/api/v1/crates/abstractavatar", headers=headers), timeout=20) as response:
+                  crate_versions = {row["num"] for row in json.load(response)["versions"] if not row["yanked"]}
+              if version not in crate_versions:
+                  raise SystemExit(f"crates.io has no abstractavatar {version}: publish the crate locally (cargo publish) before releasing the Python distribution.")
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as fh:
+              print(f"version={version}", file=fh)
+              print(f"tag={tag}", file=fh)
+              print(f"sha={sha}", file=fh)
+              print(f"tag_exists={str(tag_exists).lower()}", file=fh)
+              print(f"should_publish={str(publish).lower()}", file=fh)
+          print(f"version={version} tag={tag} sha={sha} tag_exists={tag_exists} publish={publish}")
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  sdist:
+    name: Build sdist (and a wheel from it)
+    runs-on: ubuntu-24.04
+    needs: verify
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.10"
+      - name: Build sdist, then a wheel from the sdist
+        run: |
+          python -m pip install -U pip build twine
+          python -m build --outdir dist
+          python -m twine check dist/*
+      - name: Test the wheel built from the sdist
+        run: |
+          python -m pip install dist/*.whl pytest
+          mkdir -p "$RUNNER_TEMP/sdist-test"
+          cp -R tests "$RUNNER_TEMP/sdist-test/"
+          cd "$RUNNER_TEMP/sdist-test"
+          python -m pytest -q tests
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  wheels:
+    name: Wheels ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-24.04, archs: x86_64 }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm, archs: aarch64 }
+          - { name: macos-arm64, os: macos-15, archs: arm64 }
+          - { name: macos-x86_64, os: macos-15-intel, archs: x86_64 }
+          - { name: windows-amd64, os: windows-2025, archs: AMD64 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@stable
+        if: runner.os != 'Linux'
+      - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
+        env:
+          CIBW_ARCHS: ${{ matrix.archs }}
+          # The wheel is py3-none-<platform>: cp310 builds it, cp313 reuses and tests it.
+          CIBW_BUILD: "cp310-* cp313-*"
+          CIBW_SKIP: "*-musllinux_*"
+          CIBW_BEFORE_ALL_LINUX: "curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable"
+          CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
+          CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=11.0
+          # The wheel ships a prebuilt native library and no extension module.
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: ""
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: "python -m pytest -q {project}/tests"
+        with:
+          output-dir: wheelhouse
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  ensure-tag:
+    name: Ensure release tag
+    runs-on: ubuntu-24.04
+    needs: [verify, sdist, wheels]
+    if: needs.verify.outputs.should_publish == 'true'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          fetch-depth: 0
+      - name: Create the annotated tag for a dispatched release of a new version
+        if: github.event_name == 'workflow_dispatch' && needs.verify.outputs.tag_exists != 'true'
+        run: |
+          tag="${{ needs.verify.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" -m "abstractavatar ${tag}" "${{ needs.verify.outputs.sha }}"
+          git push origin "${tag}"
+      - name: Use the existing tag
+        if: github.event_name != 'workflow_dispatch' || needs.verify.outputs.tag_exists == 'true'
+        run: echo "Using existing tag ${{ needs.verify.outputs.tag }} at ${{ needs.verify.outputs.sha }}"
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-24.04
+    needs: [verify, ensure-tag]
+    if: needs.verify.outputs.should_publish == 'true'
+    environment:
+      name: pypi
+      url: https://pypi.org/project/abstractavatar/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Check the distribution set
+        run: |
+          ls -l dist
+          test "$(ls dist/*.tar.gz | wc -l)" -eq 1
+          test "$(ls dist/*.whl | wc -l)" -eq 5
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [verify, publish-pypi]
+    if: needs.verify.outputs.should_publish == 'true'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: .
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ needs.verify.outputs.tag }}
+          name: abstractavatar ${{ needs.verify.outputs.tag }}
+          body_path: release-notes.md
+          files: dist/*
+          fail_on_unmatched_files: true
