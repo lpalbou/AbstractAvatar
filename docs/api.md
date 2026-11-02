@@ -41,7 +41,7 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
-use it for native integrations. The legacy borrowed-pointer functions require caller synchronization.
+use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.
 Native callers must follow [the frame contract](frame-contract.md). Browser adapters copy pixels from WebAssembly memory
 before reusing or destroying the handle. Do not persist numeric catalog codes or native handles.
 

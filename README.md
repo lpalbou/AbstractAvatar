@@ -1,5 +1,9 @@
 # AbstractAvatar
 
+[![crates.io](https://img.shields.io/crates/v/abstractavatar.svg)](https://crates.io/crates/abstractavatar)
+[![docs.rs](https://img.shields.io/docsrs/abstractavatar)](https://docs.rs/abstractavatar)
+[![CI](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml)
+
 AbstractAvatar generates procedural avatars from explicit activity state, time, audio level and
 gaze. One Rust implementation supplies terminal, browser and native applications with a common
 catalog and rendering behavior.
@@ -9,6 +13,28 @@ to your application's state. The host supplies state and presentation; AbstractA
 the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
+
+**What's new in 0.1.0:** the first release of the `abstractavatar` crate. See the
+[changelog](CHANGELOG.md#010---2026-11-02).
+
+## Start with Rust
+
+Add the crate from crates.io (Rust 1.87+):
+
+```sh
+cargo add abstractavatar
+```
+
+```rust
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
+
+let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
+let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
+```
+
+Enable the `ffi` feature for the C ABI and WebAssembly exports, and `json` for the versioned
+parameter descriptor.
 
 ## Start with Python
 

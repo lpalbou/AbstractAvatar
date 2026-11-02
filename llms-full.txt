@@ -26,6 +26,10 @@
 
 # AbstractAvatar
 
+[![crates.io](https://img.shields.io/crates/v/abstractavatar.svg)](https://crates.io/crates/abstractavatar)
+[![docs.rs](https://img.shields.io/docsrs/abstractavatar)](https://docs.rs/abstractavatar)
+[![CI](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/lpalbou/AbstractAvatar/actions/workflows/ci.yml)
+
 AbstractAvatar generates procedural avatars from explicit activity state, time, audio level and
 gaze. One Rust implementation supplies terminal, browser and native applications with a common
 catalog and rendering behavior.
@@ -35,6 +39,28 @@ to your application's state. The host supplies state and presentation; AbstractA
 the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
+
+**What's new in 0.1.0:** the first release of the `abstractavatar` crate. See the
+[changelog](CHANGELOG.md#010---2026-11-02).
+
+## Start with Rust
+
+Add the crate from crates.io (Rust 1.87+):
+
+```sh
+cargo add abstractavatar
+```
+
+```rust
+use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
+
+let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
+let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
+```
+
+Enable the `ffi` feature for the C ABI and WebAssembly exports, and `json` for the versioned
+parameter descriptor.
 
 ## Start with Python
 
@@ -115,6 +141,13 @@ See [the frame contract](frame-contract.md) for dimensions, ownership and reduce
 
 ## Use Rust
 
+Add the crate from crates.io:
+
+```sh
+cargo add abstractavatar
+cargo add abstractavatar --features ffi,json   # C ABI/WebAssembly exports and the descriptor
+```
+
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
@@ -151,15 +184,17 @@ signals, preferences, palette, scheduling and presentation.
 
 ```mermaid
 flowchart LR
-    I[Style and explicit state/time/audio/gaze] --> G[AbstractAvatar Rust generator]
-    G --> R[Material samples or RGBA frames]
-    G --> W[Same generator compiled to WebAssembly]
-    R --> T[Terminal frame player]
-    R --> N[Native image presenter]
-    W --> C[Canvas presenter]
-    H[Host visibility, motion preference and clock] --> T
-    H --> N
-    H --> C
+    I[Host input: style key, state, time, audio level/bands, gaze] --> G[abstractavatar crate: catalog, scenes, rasterizer]
+    P[Host palette: Warm/Eye/Dim ramps] --> G
+    G -->|Frame::rgba| RS[Rust presenters, e.g. terminal frame player]
+    G -->|ffi feature| A[C ABI avatar.h: bounded handles, RGBA buffers]
+    A --> PY[Python ctypes binding and PNG preview command]
+    A --> N[Native image presenter]
+    A -->|wasm32-unknown-unknown| W[WebAssembly module]
+    W --> C[Browser Canvas presenter]
+    H[Host clock, visibility and reduced-motion preference] -.-> RS
+    H -.-> N
+    H -.-> C
 ```
 
 The [descriptor](frame-contract.md) selects built-in generation; it does not introduce a new
@@ -229,7 +264,7 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
-use it for native integrations. The legacy borrowed-pointer functions require caller synchronization.
+use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.
 Native callers must follow [the frame contract](frame-contract.md). Browser adapters copy pixels from WebAssembly memory
 before reusing or destroying the handle. Do not persist numeric catalog codes or native handles.
 
@@ -608,28 +643,39 @@ SOFTWARE.
 
 # Changelog
 
-## Unreleased
+## [0.1.0] - 2026-11-02
+
+First release of the `abstractavatar` crate on crates.io. AbstractAvatar is a local procedural
+avatar generator: your application supplies a style key, an activity state, time, audio level and
+gaze, and the crate returns composited RGBA pixels. One Rust implementation serves terminal,
+native and browser hosts.
 
 ### Added
 
-- Shared procedural avatar catalog with explicit activity states, audio level, time and gaze.
-- Rust sampling API, native C interface and browser WebAssembly build.
-- Python rendering API and PNG-preview command.
-- Versioned parameter descriptor and bounded raster frame contract.
-- Composited Rust `Frame::rgba` sampling with host-owned palettes and bounded pixel footprints.
-
-### Fixed
-
-- Legacy Vortex responds to measured microphone loudness while Listening.
-- Overlapping material light retains each color contribution in native and browser frames.
-- Watch Wave uses five translucent ribbons and a working spiral; Watch Hover has a shaded shell,
-  visor and engine plumes. Watch Rings uses six icosahedral great circles, and Watch Eye retains
-  asymmetric lids, iris fibers, a brow and lashes. Watch Halo has uneven flowing streamers.
+- A catalog of 44 procedural designs (shaded characters, particle orbs, forms, portraits,
+  machines, nature scenes and a woven orb) with stable style keys, display names, families and
+  design provenance.
+- Seven explicit activity states: ready, thinking, working, listening, speaking, waiting and
+  error. Audio level, eight optional audio bands and gaze add visual input to the chosen state;
+  listening and speaking poses respond to measured loudness.
+- Rust API: `AvatarStyle`, `AvatarPose`, `Gaze`, `Frame::new` for repeated sampling, and
+  `Frame::rgba` for composited straight-alpha RGBA8 through host-owned `Palette` ramps, with
+  bounded pixel footprints and antialiasing. `Frame::sample` returns a single-material sample.
+- Layered material compositing: overlapping material light keeps each color contribution, and
+  shaded surfaces and translucent ribbons composite in the shared rasterizer.
+- `ffi` feature: a C ABI (`avatar.h`) with bounded handles (1..512 pixels, at most 16 live
+  handles), palette, gaze and audio-band setters, and `avatar_render_copy` into caller-owned
+  memory. The same exports build for `wasm32-unknown-unknown` for browser Canvas presenters.
+- `json` feature: the versioned, inert parameter descriptor (`schema/descriptor.schema.json`).
+- Python binding and `python -m abstractavatar` preview command, installed from a source
+  checkout with `python -m pip install .`.
 
 ### Compatibility
 
-- The six shaded style identifiers and their first six ABI catalog codes retain their ordering.
 - Persist style keys. Numeric catalog codes are resolved at runtime and are not preference values.
+- The first six ABI catalog codes (`halo`, `hover`, `vortex`, `eclipse`, `eye`, `rover`) keep
+  their ordering.
+- Rust 1.87 or newer.
 
 ---
 

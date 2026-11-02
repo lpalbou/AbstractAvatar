@@ -2,9 +2,9 @@
 name: abstractavatar
 description: Render and integrate AbstractAvatar procedural characters using its local Python, Rust or native/WebAssembly APIs. Use for catalog selection, activity-driven frames, PNG previews and platform frame players; not for generating artwork with an AI model or loading arbitrary animation files.
 license: MIT
-compatibility: Python 3.10+; source builds need Rust 1.87+. Native wheels are platform-specific. Rendering is offline.
+compatibility: Rust crate `abstractavatar` on crates.io (Rust 1.87+); Python 3.10+ from a source checkout. Native wheels are platform-specific. Rendering is offline.
 metadata:
-  package-version: unreleased
+  package-version: 0.1.0
 ---
 
 # Use AbstractAvatar
@@ -25,6 +25,9 @@ python -c 'import abstractavatar; print(abstractavatar.__version__); assert len(
 The source installation builds the native library. A built platform wheel bundles that library.
 If loading fails, stop and report the missing native artifact; do not search system caches or
 download an arbitrary library. An explicit `library_path` is for a trusted chosen build.
+
+Rust hosts add the crate with `cargo add abstractavatar`; the `ffi` feature adds the C ABI and
+WebAssembly exports, and `json` adds the versioned descriptor.
 
 ## Working model
 

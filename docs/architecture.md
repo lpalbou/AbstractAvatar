@@ -5,15 +5,17 @@ signals, preferences, palette, scheduling and presentation.
 
 ```mermaid
 flowchart LR
-    I[Style and explicit state/time/audio/gaze] --> G[AbstractAvatar Rust generator]
-    G --> R[Material samples or RGBA frames]
-    G --> W[Same generator compiled to WebAssembly]
-    R --> T[Terminal frame player]
-    R --> N[Native image presenter]
-    W --> C[Canvas presenter]
-    H[Host visibility, motion preference and clock] --> T
-    H --> N
-    H --> C
+    I[Host input: style key, state, time, audio level/bands, gaze] --> G[abstractavatar crate: catalog, scenes, rasterizer]
+    P[Host palette: Warm/Eye/Dim ramps] --> G
+    G -->|Frame::rgba| RS[Rust presenters, e.g. terminal frame player]
+    G -->|ffi feature| A[C ABI avatar.h: bounded handles, RGBA buffers]
+    A --> PY[Python ctypes binding and PNG preview command]
+    A --> N[Native image presenter]
+    A -->|wasm32-unknown-unknown| W[WebAssembly module]
+    W --> C[Browser Canvas presenter]
+    H[Host clock, visibility and reduced-motion preference] -.-> RS
+    H -.-> N
+    H -.-> C
 ```
 
 The [descriptor](frame-contract.md) selects built-in generation; it does not introduce a new

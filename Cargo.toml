@@ -6,6 +6,12 @@ rust-version = "1.87"
 license = "MIT"
 description = "Platform-independent procedural activity avatars with optional native/WebAssembly ABI"
 repository = "https://github.com/lpalbou/AbstractAvatar"
+documentation = "https://docs.rs/abstractavatar"
+readme = "README.md"
+authors = ["Laurent-Philippe Albou"]
+keywords = ["avatar", "procedural", "animation", "webassembly", "rgba"]
+categories = ["graphics", "rendering", "multimedia::images", "wasm"]
+exclude = [".github/", "docs/media/"]
 [lib]
 crate-type = ["rlib", "cdylib"]
 [features]
@@ -15,3 +21,5 @@ json = ["dep:serde", "dep:serde_json"]
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+[package.metadata.docs.rs]
+all-features = true

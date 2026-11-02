@@ -1,24 +1,35 @@
 # Changelog
 
-## Unreleased
+## [0.1.0] - 2026-11-02
+
+First release of the `abstractavatar` crate on crates.io. AbstractAvatar is a local procedural
+avatar generator: your application supplies a style key, an activity state, time, audio level and
+gaze, and the crate returns composited RGBA pixels. One Rust implementation serves terminal,
+native and browser hosts.
 
 ### Added
 
-- Shared procedural avatar catalog with explicit activity states, audio level, time and gaze.
-- Rust sampling API, native C interface and browser WebAssembly build.
-- Python rendering API and PNG-preview command.
-- Versioned parameter descriptor and bounded raster frame contract.
-- Composited Rust `Frame::rgba` sampling with host-owned palettes and bounded pixel footprints.
-
-### Fixed
-
-- Legacy Vortex responds to measured microphone loudness while Listening.
-- Overlapping material light retains each color contribution in native and browser frames.
-- Watch Wave uses five translucent ribbons and a working spiral; Watch Hover has a shaded shell,
-  visor and engine plumes. Watch Rings uses six icosahedral great circles, and Watch Eye retains
-  asymmetric lids, iris fibers, a brow and lashes. Watch Halo has uneven flowing streamers.
+- A catalog of 44 procedural designs (shaded characters, particle orbs, forms, portraits,
+  machines, nature scenes and a woven orb) with stable style keys, display names, families and
+  design provenance.
+- Seven explicit activity states: ready, thinking, working, listening, speaking, waiting and
+  error. Audio level, eight optional audio bands and gaze add visual input to the chosen state;
+  listening and speaking poses respond to measured loudness.
+- Rust API: `AvatarStyle`, `AvatarPose`, `Gaze`, `Frame::new` for repeated sampling, and
+  `Frame::rgba` for composited straight-alpha RGBA8 through host-owned `Palette` ramps, with
+  bounded pixel footprints and antialiasing. `Frame::sample` returns a single-material sample.
+- Layered material compositing: overlapping material light keeps each color contribution, and
+  shaded surfaces and translucent ribbons composite in the shared rasterizer.
+- `ffi` feature: a C ABI (`avatar.h`) with bounded handles (1..512 pixels, at most 16 live
+  handles), palette, gaze and audio-band setters, and `avatar_render_copy` into caller-owned
+  memory. The same exports build for `wasm32-unknown-unknown` for browser Canvas presenters.
+- `json` feature: the versioned, inert parameter descriptor (`schema/descriptor.schema.json`).
+- Python binding and `python -m abstractavatar` preview command, installed from a source
+  checkout with `python -m pip install .`.
 
 ### Compatibility
 
-- The six shaded style identifiers and their first six ABI catalog codes retain their ordering.
 - Persist style keys. Numeric catalog codes are resolved at runtime and are not preference values.
+- The first six ABI catalog codes (`halo`, `hover`, `vortex`, `eclipse`, `eye`, `rover`) keep
+  their ordering.
+- Rust 1.87 or newer.

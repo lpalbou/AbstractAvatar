@@ -31,6 +31,13 @@ See [the frame contract](frame-contract.md) for dimensions, ownership and reduce
 
 ## Use Rust
 
+Add the crate from crates.io:
+
+```sh
+cargo add abstractavatar
+cargo add abstractavatar --features ffi,json   # C ABI/WebAssembly exports and the descriptor
+```
+
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
