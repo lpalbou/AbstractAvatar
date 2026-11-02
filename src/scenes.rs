@@ -305,8 +305,13 @@ struct State {
     level: f32,
     t: f32,
     bands: [f32; 8],
+    /// Bounded eye shift; zero unless the design follows gaze. Only eyes may use it.
+    gaze: (f32, f32),
 }
 impl State {
+    fn look(self, (x, y): (f32, f32)) -> (f32, f32) {
+        (x + self.gaze.0, y + self.gaze.1)
+    }
     fn listening(self) -> f32 {
         if self.pose == Pose::Listening {
             1.
@@ -360,12 +365,20 @@ impl State {
     }
 }
 
-pub(crate) fn build(style: Style, pose: Pose, level: f32, t: f32, bands: [f32; 8]) -> Scene {
+pub(crate) fn build(
+    style: Style,
+    pose: Pose,
+    level: f32,
+    t: f32,
+    bands: [f32; 8],
+    gaze: (f32, f32),
+) -> Scene {
     let s = State {
         pose,
         level,
         t,
         bands,
+        gaze,
     };
     let mut out = Scene::new();
     match style {
@@ -1197,8 +1210,9 @@ fn portrait(out: &mut Scene, style: Style, s: State) {
                     0.42,
                     Material::Dim,
                 );
-                out.dot(ex, dy - 0.19, 0.023, 0.8, Material::Eye);
-                out.dot(ex - 0.008, dy - 0.20, 0.009, 0.9, s.material());
+                let (px, py) = s.look((ex, dy - 0.19));
+                out.dot(px, py, 0.023, 0.8, Material::Eye);
+                out.dot(px - 0.008, py - 0.01, 0.009, 0.9, s.material());
                 out.line(
                     (ex - 0.09, dy - 0.29),
                     (ex + 0.07, dy - 0.28 - 0.02 * s.thinking()),
@@ -1366,7 +1380,9 @@ fn eye(out: &mut Scene, s: State) {
     let gy = 0.03 * (s.t * 0.33).sin() * (1. - s.thinking()) * (1. - s.working())
         - 0.17 * s.thinking()
         + s.working() * (hash(fix, 82.) - 0.5) * 0.18
-        + 0.03;
+        + 0.03
+        + s.gaze.1 / 0.65;
+    let gx = gx + s.gaze.0 / 0.65;
     let pupil = 0.16 + 0.07 * s.listening()
         - 0.05 * s.speaking() * (1.5 * s.level).min(1.)
         - 0.02 * s.thinking()
@@ -1681,7 +1697,10 @@ fn hover_machine(out: &mut Scene, s: State) {
     }
     let blink = super::blink(s.t + 1.9, 5.7, 0.20) * (1. - 0.48 * s.thinking());
     for side in [-1., 1.] {
-        let eye = body(side * 0.18 * yaw.cos() + yaw.sin() * 0.19, visor_y + 0.015);
+        let eye = s.look(body(
+            side * 0.18 * yaw.cos() + yaw.sin() * 0.19,
+            visor_y + 0.015,
+        ));
         out.surface(
             Shape::Ellipse {
                 center: eye,
@@ -1754,7 +1773,7 @@ fn machine(out: &mut Scene, style: Style, s: State) {
             out.ellipse((0., 0.), (0.28, 0.28), 0., 0.016, 0.6, s.material());
             lamp(
                 out,
-                (cx, 0.05 * s.working() * (s.t * 2.).sin()),
+                s.look((cx, 0.05 * s.working() * (s.t * 2.).sin())),
                 0.16 + 0.025 * s.voice(),
                 s,
             );
@@ -1811,11 +1830,11 @@ fn machine(out: &mut Scene, style: Style, s: State) {
                             s.material(),
                         );
                     }
-                    lamp(out, (ex, top), 0.027, s);
+                    lamp(out, s.look((ex, top)), 0.027, s);
                 } else {
                     metal_body(out, (ex, top), 0.18, 0.155, 300, s);
                     out.ellipse((ex, top), (0.135, 0.118), 0., 0.011, 0.5, Material::Dim);
-                    lamp(out, (ex, top), 0.069, s);
+                    lamp(out, s.look((ex, top)), 0.069, s);
                 }
             }
             out.line((-0.23, 0.29), (0.23, 0.29), 0.011, 0.4, s.material());
@@ -1849,7 +1868,7 @@ fn machine(out: &mut Scene, style: Style, s: State) {
                 );
             }
             out.ellipse((cx, top), (0.4, 0.26), 0., 0.018, 0.65, s.material());
-            lamp(out, (cx - 0.13, top), 0.06, s);
+            lamp(out, s.look((cx - 0.13, top)), 0.06, s);
             for k in 0..4 {
                 lamp(out, (0.14, 0.04 + k as f32 * 0.1), 0.022, s);
             }
@@ -1947,7 +1966,7 @@ fn machine(out: &mut Scene, style: Style, s: State) {
                     } else {
                         0.05
                     };
-                    lamp(out, (cx + side * rx * 0.48, top - 0.03), eyes, s);
+                    lamp(out, s.look((cx + side * rx * 0.48, top - 0.03)), eyes, s);
                 }
                 let width = if style == Style::WatchRetro {
                     0.19
@@ -2338,7 +2357,7 @@ mod tests {
     #[test]
     fn scenes_are_bounded_and_every_style_has_geometry() {
         for st in Style::ALL.into_iter().skip(6) {
-            let scene = build(st, Pose::Speaking, 0.6, 1.1, [0.6; 8]);
+            let scene = build(st, Pose::Speaking, 0.6, 1.1, [0.6; 8], (0., 0.));
             assert!(!scene.strokes.is_empty(), "{st:?}");
             assert!(
                 scene.strokes.len() + scene.surfaces.len() < MAX_PRIMITIVES,
@@ -2356,7 +2375,14 @@ mod tests {
     }
     #[test]
     fn rendering_does_not_allocate_per_sample() {
-        let scene = build(Style::WatchNebula, Pose::Thinking, 0.6, 1., [0.; 8]);
+        let scene = build(
+            Style::WatchNebula,
+            Pose::Thinking,
+            0.6,
+            1.,
+            [0.; 8],
+            (0., 0.),
+        );
         let n = scene.strokes.len();
         for _ in 0..10 {
             for x in 0..128 {
@@ -2405,19 +2431,33 @@ mod tests {
     }
     #[test]
     fn focused_designs_retain_source_structure_and_opaque_hover_shell() {
-        let wave = build(Style::WatchWave, Pose::Speaking, 0.6, 2.3, [0.6; 8]);
+        let wave = build(
+            Style::WatchWave,
+            Pose::Speaking,
+            0.6,
+            2.3,
+            [0.6; 8],
+            (0., 0.),
+        );
         assert!(
             wave.surfaces.len() > 500,
             "wave ribbons have translucent bodies"
         );
-        let hover = build(Style::WatchHover, Pose::Ready, 0., 2.3, [0.; 8]);
+        let hover = build(Style::WatchHover, Pose::Ready, 0., 2.3, [0.; 8], (0., 0.));
         assert!(
             hover.surfaces.len() > 15,
             "shell, visor, engines and eyes are surfaces"
         );
         let palette = [[0xffffffff; 256]; 3];
         assert_eq!(hover.rgba(0., 0., 0.01, &palette)[3], 255);
-        let eye = build(Style::WatchEye, Pose::Speaking, 0.6, 2.3, [0.6; 8]);
+        let eye = build(
+            Style::WatchEye,
+            Pose::Speaking,
+            0.6,
+            2.3,
+            [0.6; 8],
+            (0., 0.),
+        );
         assert!(
             eye.strokes.len() > 900,
             "iris fibers, lids and brow remain separate"

@@ -38,7 +38,13 @@ def main():
                         raw = renderer.render(design["id"], state, .6, 1.1, bands=[.1,.2,.3,.4,.5,.6,.7,.8])
                         filename = f"{size}-{design['code']}-{pose}.rgba"
                         (output / filename).write_bytes(raw)
-                        cases.append(dict(size=size, style=design["code"], pose=pose, file=filename))
+                        cases.append(dict(size=size, style=design["code"], pose=pose, file=filename, gaze=[0, 0]))
+                    if size == 64 and design["gaze"] == "eyes":
+                        # Eye-following path: Ready with an off-centre gaze.
+                        raw = renderer.render(design["id"], "ready", .6, 1.1, gaze=(.75, -.5), bands=[.1,.2,.3,.4,.5,.6,.7,.8])
+                        filename = f"{size}-{design['code']}-gaze.rgba"
+                        (output / filename).write_bytes(raw)
+                        cases.append(dict(size=size, style=design["code"], pose=0, file=filename, gaze=[.75, -.5]))
         manifest = output / "manifest.json"
         manifest.write_text(json.dumps(dict(palette=palette, cases=cases)))
         subprocess.run(["node", str(ROOT / "scripts/check_portability.mjs"), str(args.wasm.resolve()), str(manifest)], check=True)

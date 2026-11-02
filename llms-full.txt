@@ -209,7 +209,9 @@ color blending. Rust presenters can use `Frame::rgba` with the same palette ramp
 See [rendering](rendering.md).
 
 Core generation has no network, microphone, model, timer, global mouse listener or UI-framework
-dependency. Gaze and audio levels are inputs supplied by the host. Keeping those responsibilities
+dependency. Gaze and audio levels are inputs supplied by the host. Gaze moves only the eyes of
+designs whose catalog `gaze` component is `eyes`, by a bounded offset; it never moves, tilts or
+offsets a body, sphere or scene, and the host owns its smoothing. Keeping those responsibilities
 explicit lets multiple applications present the same design without sharing application state.
 
 Rendered frames use standard RGBA channel ordering. PNG is used for portable still-image
@@ -231,7 +233,8 @@ See [catalog](catalog.md) and [ADR 0001](adr/0001-portable-procedural-generation
 Use it as a context manager or call `close()` when its host is disposed.
 
 `render(style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True)`
-returns owned RGBA bytes. Store keys from `catalog()`, and use the named activity states listed
+returns owned RGBA bytes. Gaze shifts only the eyes of designs whose catalog `gaze` is `"eyes"`,
+in the ready state; other designs ignore it (see [Gaze](frame-contract.md#gaze)). Store keys from `catalog()`, and use the named activity states listed
 in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
 normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
 normalized audio-band levels. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
@@ -245,6 +248,8 @@ specified by that object.
 
 `AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
 activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
+`AvatarStyle::gaze()` returns the component a gaze moves, `"eyes"` or `"none"`; `GAZE_REACH`
+is the largest eye shift, `[0.05, 0.025]` of the avatar radius.
 `Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
 `Palette` is `[[u32; 256]; 3]`: Warm, Eye and Dim shade ramps packed as `0xRRGGBBAA`.
 Prepare these ramps once per theme. `pixel_size` is the full normalized pixel width, usually
@@ -264,6 +269,7 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 
 [`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
+Catalog field 5 is the design's gaze component (`eyes` or `none`).
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
 use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.
@@ -301,8 +307,24 @@ URL or library name. Unsupported versions, styles, states and fields are explici
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
-from -1 to 1. Numeric values must be finite; a JSON descriptor is limited to 4096 UTF-8 bytes. Runtime adapters
+from -1 to 1 (see [Gaze](#gaze)). Numeric values must be finite; a JSON descriptor is limited to 4096 UTF-8 bytes. Runtime adapters
 should use a local elapsed clock, not an absolute epoch timestamp.
+
+## Gaze
+
+Gaze moves eyes only. Each catalog design declares a `gaze` component:
+
+| `gaze` | Designs | Effect of a gaze input |
+|---|---|---|
+| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (for example `hover`, `rover`, `eye`, `watch-hover`, `watch-rover`, `watch-face`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
+| `none` | Orbs, forms, cosmic scenes, nature scenes, silhouettes, the woven orb and machines without looking eyes | Ignored. The frame is identical with or without gaze. |
+
+Gaze applies in the `ready` state; every other state ignores it so that activity motion stays
+readable. The generator is stateless and frames are a pure function of their inputs, so temporal
+smoothing belongs to the host: ease the gaze value toward the pointer (for example exponential
+smoothing over about 150 ms), send gaze only for designs whose `gaze` is `eyes`, and return it to
+`[0, 0]` after inactivity. Read the component from the installed catalog rather than hardcoding a
+list.
 
 ## Raster layout
 
@@ -428,7 +450,7 @@ label. See [the frame contract](frame-contract.md) and [ADR 0002](adr/0002-mater
 # Catalog and activity
 
 `catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
-stable style key, display name, description, family and source reference. `catalog.json` records
+stable style key, display name, description, family, source reference and gaze component. `catalog.json` records
 the design provenance.
 
 The catalog preserves shaded terminal characters separately from particle designs whose names
@@ -456,6 +478,14 @@ integrated.
 
 The application decides the state. AbstractAvatar does not infer it from a connection, model or
 microphone. Audio level and optional gaze add visual input to the selected state.
+
+## Gaze component
+
+`gaze` names the one part of a design that may follow a host-supplied gaze. `eyes` designs
+(`hover`, `eye`, `rover`, `watch-face`, `watch-eye`, `watch-lens`, `watch-dome`, `watch-valet`,
+`watch-retro`, `watch-deco`, `watch-rover`, `watch-hover`, `watch-spark` and `watch-android`)
+shift their pupils, irises or eye lamps by a small bounded offset while ready. Every other
+design is `none` and ignores gaze. See [the frame contract](frame-contract.md#gaze).
 
 Persist keys, not a display name or array index. Query the installed catalog rather than assuming
 a fixed number or ordering beyond the documented compatibility prefix. See [API](api.md) and
@@ -684,7 +714,21 @@ SOFTWARE.
 
 ## Unreleased
 
+### Changed
+
+- Gaze moves eyes only. Each catalog design declares a `gaze` component: `"eyes"` for the 14
+  designs that draw distinct eyes (`hover`, `eye`, `rover`, `watch-face`, `watch-eye`,
+  `watch-lens`, `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-rover`,
+  `watch-hover`, `watch-spark`, `watch-android`) and `"none"` for every other design. A gaze
+  input shifts only the pupils, irises or eye lamps of `eyes` designs, by at most
+  `GAZE_REACH` (0.05 of the avatar radius horizontally, 0.025 vertically), in the ready state.
+  Orbs, forms and every `none` design no longer translate toward the gaze; their frames are
+  identical with or without it.
+
 ### Added
+
+- `AvatarStyle::gaze()` and `GAZE_REACH` in Rust, catalog field 5 (`gaze`) in the C/WebAssembly
+  ABI, a `gaze` key in Python `catalog()` records and in `catalog.json`.
 
 - PyPI release lane: a release workflow builds the `abstractavatar` Python sdist and wheels for
   Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64, and publishes

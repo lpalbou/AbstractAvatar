@@ -92,6 +92,10 @@ impl Sample {
         coverage: 0.,
     };
 }
+/// Largest eye shift a full gaze produces, in centered frame units (the frame spans -1..1):
+/// 2.5% of the frame width horizontally and 1.25% vertically. Gaze never moves anything else.
+pub const GAZE_REACH: [f32; 2] = [0.05, 0.025];
+/// Normalized look direction (-1..1 each axis). Only `gaze: "eyes"` designs in Ready answer it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Gaze {
     pub x: f32,
@@ -111,6 +115,10 @@ impl Gaze {
                 0.0
             },
         }
+    }
+    /// The bounded eye shift for this gaze, in centered frame units.
+    pub(crate) fn offset(self) -> (f32, f32) {
+        (self.x * GAZE_REACH[0], self.y * GAZE_REACH[1])
     }
 }
 #[derive(Clone, Debug)]
@@ -140,12 +148,7 @@ impl Frame {
             return [0; 4];
         }
         if let Some(scene) = &self.scene {
-            scene.rgba(
-                x - self.gaze.x * 0.045,
-                y - self.gaze.y * 0.035,
-                pixel_size,
-                palette,
-            )
+            scene.rgba(x, y, pixel_size, palette)
         } else {
             raster::Color::from_sample(self.sample(x, y), palette).rgba()
         }
@@ -173,7 +176,8 @@ impl Frame {
         } else {
             0.
         };
-        let gaze = if pose == AvatarPose::Ready {
+        // Gaze only shifts the eyes of designs that have them, and only while Ready.
+        let gaze = if pose == AvatarPose::Ready && style.follows_gaze() {
             Gaze::new(gaze.x, gaze.y)
         } else {
             Gaze::default()
@@ -181,7 +185,12 @@ impl Frame {
         let bands = bands.map(|x| if x.is_finite() { x.clamp(0., 1.) } else { 0. });
         let scene = if style.code() >= 6 {
             Some(std::sync::Arc::new(scenes::build(
-                style, pose, level, time, bands,
+                style,
+                pose,
+                level,
+                time,
+                bands,
+                gaze.offset(),
             )))
         } else {
             None
@@ -195,19 +204,12 @@ impl Frame {
             scene,
         }
     }
-    pub fn sample(&self, mut x: f32, mut y: f32) -> Sample {
+    pub fn sample(&self, x: f32, y: f32) -> Sample {
         if !x.is_finite() || !y.is_finite() {
             return Sample::EMPTY;
         }
         if let Some(scene) = &self.scene {
-            return scene.sample(x - self.gaze.x * 0.045, y - self.gaze.y * 0.035);
-        }
-        if matches!(
-            self.style,
-            AvatarStyle::Halo | AvatarStyle::Vortex | AvatarStyle::Eclipse
-        ) {
-            x -= self.gaze.x * 0.045;
-            y -= self.gaze.y * 0.035;
+            return scene.sample(x, y);
         }
         sample_inner(
             self.style,
@@ -464,7 +466,7 @@ fn hover(p: AvatarPose, level: f32, time: f32, x: f32, y: f32, m: &Materials) ->
         return m.paint(&m.warm, 0.90, soft(x.abs() - 0.68, 0.04));
     }
     if (-0.10..0.20).contains(&y) && x.abs() < 0.68 {
-        let eye_y = m.gaze.y * 0.035
+        let eye_y = m.gaze.offset().1
             + if p == AvatarPose::Waiting {
                 0.07
             } else {
@@ -495,7 +497,7 @@ fn hover(p: AvatarPose, level: f32, time: f32, x: f32, y: f32, m: &Materials) ->
             1.0
         };
         let open = open * blink;
-        let gaze = m.gaze.x * 0.09
+        let gaze = m.gaze.offset().0
             + if p == AvatarPose::Waiting {
                 0.045
             } else if p == AvatarPose::Thinking {
@@ -732,13 +734,13 @@ fn eye(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Samp
         AvatarPose::Thinking => (t * 1.2).sin() * 0.23,
         AvatarPose::Working => (t * 2.0).sin() * 0.17,
         AvatarPose::Listening => -0.13,
-        AvatarPose::Ready => 0.028 * (t * 0.9).sin() + m.gaze.x * 0.17,
+        AvatarPose::Ready => 0.028 * (t * 0.9).sin() + m.gaze.offset().0,
         _ => 0.,
     };
     let gy = if p == AvatarPose::Listening {
         -0.06
     } else {
-        m.gaze.y * 0.10
+        m.gaze.offset().1 / open.max(0.16)
     };
     let d = (x - gx).hypot(yy - gy);
     let radius = 0.26
@@ -844,13 +846,13 @@ fn rover(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sa
                         }))
                 .powi(2);
             if iris < 1. {
-                let gaze = m.gaze.x * 0.06
+                let gaze = m.gaze.offset().0
                     + if p == AvatarPose::Thinking {
                         0.05 * (t * 2.).sin()
                     } else {
                         0.
                     };
-                if (dx - gaze).hypot(dy - m.gaze.y * 0.045) < 0.075 {
+                if (dx - gaze).hypot(dy - m.gaze.offset().1) < 0.075 {
                     return m.paint(&m.dim, 0.1, 1.);
                 }
                 return m.paint(
@@ -994,35 +996,60 @@ mod tests {
         }
     }
     #[test]
-    fn gaze_changes_ready_only_and_stays_bounded() {
+    fn gaze_moves_only_the_eyes_of_designs_that_have_them() {
+        // Distinct ramps per material so moving an eye over its socket shows.
+        let mut palette = [[0u32; 256]; 3];
+        for (shade, i) in (0..256u32).zip(0..) {
+            palette[0][i] = shade << 24 | 0x2040ff;
+            palette[1][i] = 0x14 << 24 | shade << 16 | 0x50d2;
+            palette[2][i] = 0x3228 << 16 | shade << 8 | 0xb4;
+        }
+        let draw = |style, pose, gaze| {
+            let frame = Frame::new(style, pose, 0.6, 1.1, gaze);
+            (0..64 * 64)
+                .map(|i| {
+                    let (x, y) = ((i % 64) as f32, (i / 64) as f32);
+                    frame.rgba((x - 31.5) / 32., (y - 31.5) / 32., 1. / 32., &palette)
+                })
+                .collect::<Vec<_>>()
+        };
+        // Outer silhouette bounds: a moving body shifts them; moving eyes stay inside.
+        let bounds = |pixels: &[[u8; 4]]| {
+            let lit: Vec<_> = (0..pixels.len()).filter(|i| pixels[*i][3] > 8).collect();
+            let (xs, ys) = (lit.iter().map(|i| i % 64), lit.iter().map(|i| i / 64));
+            (xs.clone().min(), xs.max(), ys.clone().min(), ys.max())
+        };
         for style in AvatarStyle::ALL {
-            let draw = |pose, gaze| {
-                let frame = Frame::new(style, pose, 0.6, 1.1, gaze);
-                (0..64)
-                    .flat_map(|y| {
-                        let frame = &frame;
-                        (0..64).map(move |x| {
-                            frame.sample((x as f32 - 32.0) / 32.0, (y as f32 - 32.0) / 32.0)
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            };
-            assert_ne!(
-                draw(AvatarPose::Ready, Gaze::default()),
-                draw(AvatarPose::Ready, Gaze::new(-1.0, 0.6)),
-                "{style:?}"
-            );
+            assert!(matches!(style.gaze(), "eyes" | "none"));
+            let rest = draw(style, AvatarPose::Ready, Gaze::default());
+            let covered = rest.iter().filter(|p| p[3] > 8).count();
+            for gaze in [Gaze::new(-1.0, 0.6), Gaze::new(1.0, -1.0)] {
+                let looked = draw(style, AvatarPose::Ready, gaze);
+                let changed = rest.iter().zip(&looked).filter(|(a, b)| a != b).count();
+                if style.gaze() == "none" {
+                    assert_eq!(changed, 0, "{style:?} must ignore gaze");
+                    continue;
+                }
+                assert!(changed > 0, "{style:?} eyes ignore gaze");
+                assert!(changed * 2 < covered, "{style:?} moves more than its eyes");
+                assert_eq!(bounds(&rest), bounds(&looked), "{style:?} body moved");
+            }
             for pose in AvatarPose::ALL
                 .into_iter()
                 .filter(|p| *p != AvatarPose::Ready)
             {
                 assert_eq!(
-                    draw(pose, Gaze::default()),
-                    draw(pose, Gaze::new(1.0, -1.0))
+                    draw(style, pose, Gaze::default()),
+                    draw(style, pose, Gaze::new(1.0, -1.0)),
+                    "{style:?}/{pose:?}"
                 );
             }
         }
         assert_eq!(Gaze::new(f32::NAN, 2.0), Gaze { x: 0.0, y: 1.0 });
+        assert_eq!(
+            Gaze::new(-5.0, 1.0).offset(),
+            (-GAZE_REACH[0], GAZE_REACH[1])
+        );
     }
     #[test]
     fn old_ids_and_watch_mapping_are_stable() {

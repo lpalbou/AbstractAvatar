@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 /* ABI1. Keys are durable; style indices are resolved from this catalog at runtime.
- * Fields0..4: key,name,description,watch reference,family. String pointers static.
+ * Fields0..5: key,name,description,watch reference,family,gaze("eyes"|"none"). String pointers static.
  * Pose0..6: Ready,Thinking,Working,Listening,Speaking,Waiting,Error.
  * Palette material0..2: Warm,Eye,Dim; index0..255; rgba0xRRGGBBAA.
  * Set all768 shades before draw. Dimensions1..512; at most16 live handles.
@@ -21,7 +21,8 @@ size_t avatar_style_field_len(uint32_t style,uint32_t field);
 uint32_t avatar_create(uint32_t width,uint32_t height);
 int32_t avatar_set_shade(uint32_t handle,uint32_t material,uint32_t index,uint32_t rgba);
 int32_t avatar_set_ground(uint32_t handle,uint32_t rgba);
-/* Optional normalized Ready gaze; other poses ignore it. Host expires activity. */
+/* Optional normalized Ready gaze. Moves only the eyes of gaze="eyes" designs, by at most
+ * 0.05 x 0.025 radius; gaze="none" designs and other poses ignore it. Host smooths/expires it. */
 int32_t avatar_set_gaze(uint32_t handle,float x,float y);
 /* Eight measured normalized bands; clear restores scalar-level defaults. */
 int32_t avatar_set_bands(uint32_t handle,float b0,float b1,float b2,float b3,float b4,float b5,float b6,float b7);

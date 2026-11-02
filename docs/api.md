@@ -6,7 +6,8 @@
 Use it as a context manager or call `close()` when its host is disposed.
 
 `render(style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True)`
-returns owned RGBA bytes. Store keys from `catalog()`, and use the named activity states listed
+returns owned RGBA bytes. Gaze shifts only the eyes of designs whose catalog `gaze` is `"eyes"`,
+in the ready state; other designs ignore it (see [Gaze](frame-contract.md#gaze)). Store keys from `catalog()`, and use the named activity states listed
 in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
 normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
 normalized audio-band levels. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
@@ -20,6 +21,8 @@ specified by that object.
 
 `AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
 activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
+`AvatarStyle::gaze()` returns the component a gaze moves, `"eyes"` or `"none"`; `GAZE_REACH`
+is the largest eye shift, `[0.05, 0.025]` of the avatar radius.
 `Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
 `Palette` is `[[u32; 256]; 3]`: Warm, Eye and Dim shade ramps packed as `0xRRGGBBAA`.
 Prepare these ramps once per theme. `pixel_size` is the full normalized pixel width, usually
@@ -39,6 +42,7 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 
 [`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
+Catalog field 5 is the design's gaze component (`eyes` or `none`).
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
 use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.

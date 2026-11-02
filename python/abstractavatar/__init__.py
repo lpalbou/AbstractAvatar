@@ -62,7 +62,7 @@ def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for code in range(count):
         record: dict[str, Any] = {"code": code}
-        for field, name in enumerate(("id", "name", "description", "watch_code", "family")):
+        for field, name in enumerate(("id", "name", "description", "watch_code", "family", "gaze")):
             length = int(lib.avatar_style_field_len(code, field))
             pointer = lib.avatar_style_field_ptr(code, field)
             if length > 512 or (length and not pointer):
@@ -70,6 +70,8 @@ def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
             record[name] = C.string_at(pointer, length).decode("utf-8") if length else ""
         if not record["id"] or record["id"] in seen:
             raise RuntimeError("Invalid or duplicated AbstractAvatar style identifier")
+        if record["gaze"] not in ("eyes", "none"):
+            raise RuntimeError("Invalid AbstractAvatar gaze component")
         record["reference"] = record["watch_code"]
         seen.add(record["id"])
         out.append(record)

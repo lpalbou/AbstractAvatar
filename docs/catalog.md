@@ -1,7 +1,7 @@
 # Catalog and activity
 
 `catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
-stable style key, display name, description, family and source reference. `catalog.json` records
+stable style key, display name, description, family, source reference and gaze component. `catalog.json` records
 the design provenance.
 
 The catalog preserves shaded terminal characters separately from particle designs whose names
@@ -29,6 +29,14 @@ integrated.
 
 The application decides the state. AbstractAvatar does not infer it from a connection, model or
 microphone. Audio level and optional gaze add visual input to the selected state.
+
+## Gaze component
+
+`gaze` names the one part of a design that may follow a host-supplied gaze. `eyes` designs
+(`hover`, `eye`, `rover`, `watch-face`, `watch-eye`, `watch-lens`, `watch-dome`, `watch-valet`,
+`watch-retro`, `watch-deco`, `watch-rover`, `watch-hover`, `watch-spark` and `watch-android`)
+shift their pupils, irises or eye lamps by a small bounded offset while ready. Every other
+design is `none` and ignores gaze. See [the frame contract](frame-contract.md#gaze).
 
 Persist keys, not a display name or array index. Query the installed catalog rather than assuming
 a fixed number or ordering beyond the documented compatibility prefix. See [API](api.md) and
