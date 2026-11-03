@@ -188,6 +188,7 @@ jobs:
           python -m pip install dist/*.whl pytest
           mkdir -p "$RUNNER_TEMP/sdist-test"
           cp -R tests "$RUNNER_TEMP/sdist-test/"
+          cp catalog.json "$RUNNER_TEMP/sdist-test/"   # the gaze test compares the native catalog with the shipped one
           cd "$RUNNER_TEMP/sdist-test"
           python -m pytest -q tests
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
