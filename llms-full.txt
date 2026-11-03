@@ -41,8 +41,9 @@ the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
 
-**What's new in 0.1.0:** the first release, as the `abstractavatar` crate on crates.io and the
-`abstractavatar` Python distribution on PyPI. See the [changelog](CHANGELOG.md#010---2026-11-02).
+**What's new in 0.1.1:** gaze moves the eyes only. Each catalog design declares a `gaze`
+component (`"eyes"` or `"none"`); a gaze input shifts only the eyes of `eyes` designs, and every
+other design draws the same frame with or without it. See the [changelog](CHANGELOG.md#011---2026-11-03).
 
 ## Start with Rust
 
@@ -712,7 +713,7 @@ SOFTWARE.
 
 # Changelog
 
-## Unreleased
+## [0.1.1] - 2026-11-03
 
 ### Changed
 

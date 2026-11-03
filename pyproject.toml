@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "abstractavatar"
-version = "0.1.0"
+version = "0.1.1"
 description = "Shared procedural avatar generation for native, terminal and web platforms"
 requires-python = ">=3.10"
 license = "MIT"

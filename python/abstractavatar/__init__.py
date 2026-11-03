@@ -9,7 +9,7 @@ import sys
 import threading
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = ["Renderer", "catalog", "validate_descriptor", "__version__"]
 _STATES = ("ready", "thinking", "working", "listening", "speaking", "waiting", "error")
 _LIBRARIES: dict[str, Any] = {}
