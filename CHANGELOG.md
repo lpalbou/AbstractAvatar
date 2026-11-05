@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- The `iphone-weave` listening mesh expands with microphone energy. Its geometry
+  previously ignored the level while the listening globe was selected.
+
 ## [0.1.1] - 2026-11-03
 
 ### Changed

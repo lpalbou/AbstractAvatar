@@ -2321,9 +2321,13 @@ fn weave(out: &mut Scene, s: State) {
                 py,
                 (cord as f32 * 34. + s.t * 9. + energy * (cord as f32 - 2.) * 28.) * PI / 180.,
             );
+            // Listening selects the globe completely, so orbit deformation
+            // cannot carry its microphone energy. Breathe the connected mesh
+            // itself with real input, preserving the quiet/thinking geometry.
+            let listening_scale = 1.14 * (1. + 0.18 * s.level * s.listening());
             let globe = (
-                (a.0 + (b.0 - a.0) * fraction) * 1.14,
-                (a.1 + (b.1 - a.1) * fraction) * 1.14,
+                (a.0 + (b.0 - a.0) * fraction) * listening_scale,
+                (a.1 + (b.1 - a.1) * fraction) * listening_scale,
             );
             let h = hand_point(along, cord, s.t);
             points.push((
@@ -2354,6 +2358,22 @@ fn weave(out: &mut Scene, s: State) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn listening_weave_geometry_moves_with_microphone_energy() {
+        let quiet = build(Style::IphoneWeave, Pose::Listening, 0., 1., [0.; 8], (0., 0.));
+        let loud = build(Style::IphoneWeave, Pose::Listening, 1., 1., [1.; 8], (0., 0.));
+        let radius = |scene: &Scene| scene.strokes.iter()
+            .flat_map(|line| [line.a, line.b])
+            .map(|(x, y)| (x*x + y*y).sqrt()).fold(0_f32, f32::max);
+        assert!(radius(&loud) > radius(&quiet) * 1.15);
+        assert!(radius(&loud) < 1.15);
+        for pose in [Pose::Ready, Pose::Thinking] {
+            let a = build(Style::IphoneWeave, pose, 0., 1., [0.; 8], (0., 0.));
+            let b = build(Style::IphoneWeave, pose, 1., 1., [1.; 8], (0., 0.));
+            assert_eq!(radius(&a), radius(&b));
+        }
+    }
+
     #[test]
     fn scenes_are_bounded_and_every_style_has_geometry() {
         for st in Style::ALL.into_iter().skip(6) {
