@@ -4,7 +4,7 @@ description: Render and integrate AbstractAvatar procedural characters using its
 license: MIT
 compatibility: Rust crate `abstractavatar` on crates.io (Rust 1.87+); Python 3.10+ package `abstractavatar` on PyPI. Native wheels are platform-specific. Rendering is offline.
 metadata:
-  package-version: 0.1.1
+  package-version: 0.1.2
 ---
 
 # Use AbstractAvatar
