@@ -2360,11 +2360,30 @@ mod tests {
     use super::*;
     #[test]
     fn listening_weave_geometry_moves_with_microphone_energy() {
-        let quiet = build(Style::IphoneWeave, Pose::Listening, 0., 1., [0.; 8], (0., 0.));
-        let loud = build(Style::IphoneWeave, Pose::Listening, 1., 1., [1.; 8], (0., 0.));
-        let radius = |scene: &Scene| scene.strokes.iter()
-            .flat_map(|line| [line.a, line.b])
-            .map(|(x, y)| (x*x + y*y).sqrt()).fold(0_f32, f32::max);
+        let quiet = build(
+            Style::IphoneWeave,
+            Pose::Listening,
+            0.,
+            1.,
+            [0.; 8],
+            (0., 0.),
+        );
+        let loud = build(
+            Style::IphoneWeave,
+            Pose::Listening,
+            1.,
+            1.,
+            [1.; 8],
+            (0., 0.),
+        );
+        let radius = |scene: &Scene| {
+            scene
+                .strokes
+                .iter()
+                .flat_map(|line| [line.a, line.b])
+                .map(|(x, y)| (x * x + y * y).sqrt())
+                .fold(0_f32, f32::max)
+        };
         assert!(radius(&loud) > radius(&quiet) * 1.15);
         assert!(radius(&loud) < 1.15);
         for pose in [Pose::Ready, Pose::Thinking] {
