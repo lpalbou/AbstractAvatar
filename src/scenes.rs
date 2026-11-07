@@ -305,6 +305,8 @@ struct State {
     level: f32,
     t: f32,
     bands: [f32; 8],
+    /// Whether the host measured `bands`; otherwise every band equals `level`.
+    measured: bool,
     /// Bounded eye shift; zero unless the design follows gaze. Only eyes may use it.
     gaze: (f32, f32),
 }
@@ -370,14 +372,15 @@ pub(crate) fn build(
     pose: Pose,
     level: f32,
     t: f32,
-    bands: [f32; 8],
+    bands: Option<[f32; 8]>,
     gaze: (f32, f32),
 ) -> Scene {
     let s = State {
         pose,
         level,
         t,
-        bands,
+        bands: bands.unwrap_or([level; 8]),
+        measured: bands.is_some(),
         gaze,
     };
     let mut out = Scene::new();
@@ -386,37 +389,21 @@ pub(crate) fn build(
         | Style::WatchVortex
         | Style::WatchNebula
         | Style::WatchLiquid
-        | Style::WatchGalaxy
-        | Style::WatchKitty
-        | Style::WatchFaceShape
-        | Style::WatchWaveShape => planet(&mut out, style, s),
+        | Style::WatchGalaxy => planet(&mut out, style, s),
         Style::WatchRings => rings(&mut out, s),
         Style::WatchLotus => lotus(&mut out, s),
         Style::WatchCrystal => crystal(&mut out, s),
         Style::WatchEclipse => eclipse(&mut out, s),
         Style::WatchSynapse => synapse(&mut out, s),
-        Style::WatchDrop => drop_scene(&mut out, s),
         Style::WatchWave => wave(&mut out, s, false),
         Style::WatchWell => well(&mut out, s),
         Style::WatchBlackHole => blackhole(&mut out, s),
         Style::WatchAccretion => accretion(&mut out, s),
-        Style::WatchFace | Style::WatchImprint | Style::WatchContour | Style::WatchMembrane => {
-            portrait(&mut out, style, s)
-        }
         Style::WatchAurora => aurora(&mut out, s),
         Style::WatchMurmuration => murmuration(&mut out, s),
         Style::WatchEye => eye(&mut out, s),
-        Style::WatchLens
-        | Style::WatchDome
-        | Style::WatchValet
-        | Style::WatchRetro
-        | Style::WatchDeco
-        | Style::WatchRover
-        | Style::WatchHover
-        | Style::WatchSpark
-        | Style::WatchCruiser
-        | Style::WatchAndroid
-        | Style::WatchSentinel => machine(&mut out, style, s),
+        Style::WatchRover | Style::WatchSpark => machine(&mut out, style, s),
+        Style::WatchHover => hover_machine(&mut out, s),
         Style::WatchOcean => ocean(&mut out, s),
         Style::IphoneWeave => weave(&mut out, s),
         _ => {}
@@ -481,15 +468,16 @@ fn planet(out: &mut Scene, style: Style, s: State) {
                 // Five broad and three finer streamers, broad at the foot and
                 // narrowing outward. Voice flows in to listen, out to speak;
                 // thought is a turning crown and work a fixed flowing crown.
+                // Thought draws the streamers slowly in; work throws them out fast.
                 let flow = if s.thinking() > 0. {
-                    u
+                    fract(u - 0.16 * s.t)
                 } else {
                     fract(
                         u + s.t
                             * if s.listening() > 0. {
                                 -0.4
                             } else if s.working() > 0. {
-                                0.65
+                                0.95
                             } else {
                                 0.4
                             },
@@ -503,8 +491,8 @@ fn planet(out: &mut Scene, style: Style, s: State) {
                 let light = (0.5 + 0.5 * (a - 1.57 * s.t).cos()).powi(3);
                 let reach = shape
                     * ((s.listening() + s.speaking()) * (0.35 + 1.1 * s.band(band))
-                        + 0.72 * s.thinking() * (0.75 + 0.25 * light)
-                        + 0.85 * s.working());
+                        + 0.38 * s.thinking() * (0.75 + 0.25 * light)
+                        + 1.05 * s.working());
                 let length = reach * (0.2 + 0.8 * stream.powf(0.6 + 2.2 * flow));
                 let rr = 0.97 + length * flow.powf(1.4);
                 (
@@ -518,9 +506,14 @@ fn planet(out: &mut Scene, style: Style, s: State) {
             }
             Style::WatchVortex => {
                 let rr = 0.55 + (0.75 + 0.55 * s.band(band)) * u * (1. - 0.18 * s.listening());
+                // Winding c and turn w set where a crest travels: w/c > 0 carries it
+                // inward. Thought winds the arms tight and draws them slowly in; work
+                // loosens them and reverses the turn, so the arms stream outward.
                 let angle = (band % 2) as f32 * PI
-                    + (3. - 1.4 * s.voice() + 0.9 * s.listening()) * (rr / 0.55).ln()
-                    + s.t * (0.12 + 0.4 * s.motion() + 0.2 * s.voice());
+                    + (3. - 1.4 * s.voice() + 0.9 * s.listening() + 1.2 * s.thinking()
+                        - 1.1 * s.working())
+                        * (rr / 0.55).ln()
+                    + s.t * (0.17 + 0.2 * s.voice() + 0.25 * s.thinking() - 1.05 * s.working());
                 (rr * angle.cos(), rr * angle.sin(), 0.45 * (1. - 0.5 * u))
             }
             Style::WatchNebula => {
@@ -534,8 +527,12 @@ fn planet(out: &mut Scene, style: Style, s: State) {
                     )
                 } else if band <= 6 {
                     let j = (band % 3) as f32;
-                    let a = TAU * j / 3. + 0.5 + 0.03 * s.t;
-                    let c = 0.42 * (1. + 0.55 * s.voice());
+                    // The lobes fold in and turn slowly to think, push out and wheel to work.
+                    let a =
+                        TAU * j / 3. + 0.5 + s.t * (0.03 + 0.1 * s.thinking() + 0.55 * s.working());
+                    let c = 0.42
+                        * (1. + 0.55 * s.voice())
+                        * (1. - 0.38 * s.thinking() + 0.22 * s.working());
                     let l = 0.3 * (1. + 0.4 * s.voice());
                     (
                         c * a.cos() + l * gy * a.cos() - 1.5 * l * gx * a.sin(),
@@ -543,15 +540,22 @@ fn planet(out: &mut Scene, style: Style, s: State) {
                         0.04 + 0.48 * (-g * g / 2.).exp(),
                     )
                 } else {
-                    let rr = 0.3 + 0.95 * u;
+                    // Outer dust streams away from the core while working.
+                    let rr = 0.3 + 0.95 * fract(u + 0.22 * s.t * s.working());
                     let a = 2.3 + 3.1 * (band % 2) as f32 + 0.03 * s.t + 1.9 * u;
                     (rr * a.cos(), rr * a.sin(), 0.32 * (1. - 0.6 * u))
                 }
             }
             Style::WatchLiquid => {
-                let lift = (0.06 + 0.14 * s.band(band) + 0.04 * s.working())
+                // Calm crossing swells; thought sends slow ripples to the centre,
+                // work sends quick ripples out from it.
+                let calm = (0.06 + 0.14 * s.band(band))
                     * ((3. * x + 2. * y - 1.2 * s.t).sin()
                         + 0.5 * (4. * z - 2. * y + 1.7 * s.t).sin());
+                let rr = x.hypot(y);
+                let lift = calm * (1. - s.thinking() - s.working())
+                    + s.thinking() * 0.06 * (11. * rr + 1.4 * s.t).sin()
+                    + s.working() * 0.11 * (11. * rr - 4.6 * s.t).sin();
                 (
                     x * (1.12 + 0.22 * s.voice() + lift),
                     y * (1.12 + 0.22 * s.voice() + lift),
@@ -567,63 +571,36 @@ fn planet(out: &mut Scene, style: Style, s: State) {
                 let mut angle = if band <= 2 {
                     phase
                 } else {
-                    (band % 2) as f32 * PI + 2.3 * (gr + 0.08).ln() + (hash(i, 4.) - 0.5) * 0.6
+                    (band % 2) as f32 * PI
+                        + (2.3 + 1.1 * s.thinking() - 0.8 * s.working()) * (gr + 0.08).ln()
+                        + (hash(i, 4.) - 0.5) * 0.6
                 };
-                angle -= s.t * (0.04 + 0.4 * s.motion() + s.voice() * 0.8 / (0.3 + gr));
-                gr *= 1. + 0.3 * s.band(band);
+                // Thought winds the arms in around a brighter core and turns slowly;
+                // work flings them loose and wide and turns fast.
+                angle -= s.t
+                    * (0.09
+                        + 0.1 * s.thinking()
+                        + 0.75 * s.working()
+                        + s.voice() * 0.8 / (0.3 + gr));
+                gr *= (1. + 0.3 * s.band(band)) * (1. - 0.16 * s.thinking() + 0.12 * s.working());
                 (
                     gr * angle.cos(),
                     gr * angle.sin() * 0.6,
-                    if band == 0 { 0.9 } else { 0.35 },
+                    if band == 0 {
+                        0.9 + 0.5 * s.thinking()
+                    } else {
+                        0.35
+                    },
                 )
-            }
-            Style::WatchKitty => {
-                if i % 7 == 0 {
-                    let side = if i % 2 == 0 { -1. } else { 1. };
-                    let h = hash(i, 8.);
-                    x = side * (0.5 + 0.35 * (hash(i, 9.) - 0.5) * (1. - h) + 0.08 * h);
-                    y = -0.78 - 0.55 * h;
-                    light = 0.95;
-                }
-                (
-                    x * (1. + 0.12 * s.voice()),
-                    y * (1. + 0.08 * s.voice()),
-                    0.1,
-                )
-            }
-            Style::WatchFaceShape => {
-                if z < -0.2 {
-                    continue;
-                }
-                let ex = x.abs() - 0.36;
-                let ey = y + 0.22;
-                if z > 0.35 && ex * ex + ey * ey < 0.022 {
-                    continue;
-                }
-                if (y - (0.32 - 0.5 * x * x)).abs() < 0.045 && x.abs() < 0.45 {
-                    light = 1.;
-                }
-                let mouth_region = (-(x / 0.38).powi(2) - ((y - 0.30) / 0.18).powi(2)).exp();
-                let jaw = s.voice() * (0.035 + 0.07 * super::speech(s.t)) * mouth_region;
-                (x, y + jaw + s.voice() * 0.012 * (s.t * 6.).sin(), 0.08)
-            }
-            Style::WatchWaveShape => {
-                let r = 0.25 + 0.95 * u.sqrt();
-                let aa = phase;
-                let yy = 0.14 * (r * 8. - s.t * 2.).sin() * (0.15 + s.voice());
-                (aa.cos() * r, aa.sin() * r * 0.36 + yy, 0.5)
             }
             _ => unreachable!(),
         };
-        if matches!(
-            style,
-            Style::WatchKitty | Style::WatchFaceShape | Style::WatchWaveShape
-        ) {
-            blend = 1.;
-        }
         x = mix(x, tx, blend);
         y = mix(y, ty, blend);
-        light += blend * extra + 0.35 * s.working() * (8. * r - 5. * s.t).cos().max(0.).powi(12);
+        // Light rings travel slowly inward to think and quickly outward to work.
+        light += blend * extra
+            + 0.35 * s.working() * (8. * r - 5. * s.t).cos().max(0.).powi(12)
+            + 0.3 * s.thinking() * (9. * r + 2.2 * s.t).cos().max(0.).powi(12);
         let material = if s.pose == Pose::Error {
             Material::Eye
         } else if band.is_multiple_of(3) {
@@ -656,8 +633,34 @@ fn planet(out: &mut Scene, style: Style, s: State) {
     }
 }
 
+/// How strongly each of the six rings answers the voice, 0..1, low frequencies first.
+///
+/// With measured bands, ring `i` follows the mean of the bands it spans (eight bands over
+/// six rings, so neighbours share one band). A host that sends only a level gives no
+/// spectrum, so the spread is DERIVED, not measured: each ring follows the level through
+/// its own syllable-rate envelope (distinct rates and phases, a slight low-frequency tilt),
+/// so the rings still move one by one rather than in unison. Outside listening and
+/// speaking every ring is still.
+fn ring_drive(s: State) -> [f32; 6] {
+    let voiced = s.listening() + s.speaking();
+    std::array::from_fn(|i| {
+        if s.measured {
+            let (lo, hi) = (i * 8 / 6, (i * 8 + 13) / 6);
+            let span = &s.bands[lo..hi.min(8)];
+            voiced * span.iter().sum::<f32>() / span.len() as f32
+        } else {
+            let f = i as f32;
+            let syllable = 0.5 + 0.5 * (s.t * (4.0 + 1.9 * f) + 1.7 * f).sin();
+            let phrase = 0.6 + 0.4 * (s.t * (1.3 + 0.7 * f) + 0.6 * f).sin();
+            voiced * s.level * (1. - 0.08 * f) * (0.25 + 0.75 * syllable * phrase)
+        }
+    })
+}
 // OrbScenes.RingGeometry: great circles normal to the six opposite-corner
-// axes of an icosahedron. Depth, harmonic swing and running beads are shared.
+// axes of an icosahedron. Each ring tilts, swells and brightens with its own part of
+// the voice: it pushes out while speaking and draws in while listening. Thinking turns
+// inward (the cage turns slowly, contracts, and a ring of light closes in on the core);
+// working turns outward (the cage spins, the rings swing wide and beads race).
 fn rings(out: &mut Scene, s: State) {
     type V = (f32, f32, f32);
     fn cross(a: V, b: V) -> V {
@@ -680,8 +683,10 @@ fn rings(out: &mut Scene, s: State) {
         (phi, 0., 1.),
         (phi, 0., -1.),
     ];
-    let turn = s.t * (0.12 + 1.1 * s.thinking());
+    let drive = ring_drive(s);
+    let turn = s.t * (0.12 + 0.16 * s.thinking() + 0.95 * s.working());
     let tilt = 0.42 + 0.1 * (s.t * 0.21).sin();
+    let scale = 1. - 0.1 * s.thinking() + 0.03 * s.working();
     for (i, axis) in axes.into_iter().enumerate() {
         let f = i as f32;
         let n = norm(axis);
@@ -694,19 +699,21 @@ fn rings(out: &mut Scene, s: State) {
             },
         ));
         let v = cross(n, u);
-        let swing = s.band(i + 1);
-        let theta = (0.04 + 0.22 * swing) * (s.t * (0.4 + 0.15 * f + 3.5 * swing)).sin()
-            + 0.3 * s.thinking() * (s.t * 1.4 + f).sin()
+        let d = drive[i];
+        let side = if i % 2 == 0 { 1. } else { -1. };
+        // The band sets the ring's tilt and size directly, never its speed: a changing
+        // level must not jump a ring's phase.
+        let theta = 0.04 * (s.t * (0.4 + 0.15 * f)).sin()
+            + side * 0.34 * d
+            + 0.16 * s.thinking() * (s.t * 0.6 + f).sin()
             + 0.45 * s.working() * (s.t * 3. - f * PI / 3.).sin();
         let v = (
             v.0 * theta.cos() + n.0 * theta.sin(),
             v.1 * theta.cos() + n.1 * theta.sin(),
             v.2 * theta.cos() + n.2 * theta.sin(),
         );
-        let radius = 0.46 * (0.97 + (s.listening() + s.speaking()) * (0.62 * swing - 0.22));
-        let spin = s.t
-            * (0.1 + 0.05 * f + 2.8 * swing + 1.5 * s.thinking())
-            * if i % 2 == 0 { 1. } else { -1. };
+        let radius = 0.46 * scale * (0.97 + d * (0.2 * s.speaking() - 0.13 * s.listening()));
+        let spin = (s.t * (0.1 + 0.05 * f + 0.25 * s.thinking()) + 0.9 * d) * side;
         let mut previous = None;
         for j in 0..=96 {
             let angle = TAU * j as f32 / 96.;
@@ -721,8 +728,7 @@ fn rings(out: &mut Scene, s: State) {
             );
             let point = (bx, y * tilt.cos() - bz * tilt.sin());
             let depth = smooth(-0.5, 0.5, y * tilt.sin() + bz * tilt.cos());
-            let light =
-                ((0.2 + 0.8 * depth) * (0.75 + 0.55 * swing) + 0.12 * s.thinking()) * s.light();
+            let light = ((0.2 + 0.8 * depth) * (0.75 + 0.6 * d) + 0.08 * s.thinking()) * s.light();
             let m = if s.pose == Pose::Error {
                 Material::Eye
             } else if (angle / TAU + f / 6.).fract() < 0.33 {
@@ -733,7 +739,7 @@ fn rings(out: &mut Scene, s: State) {
                 Material::Warm
             };
             if let Some(p) = previous {
-                out.glow_line(p, point, 0.0045, light, m);
+                out.glow_line(p, point, 0.0045 * (1. + 0.5 * d), light, m);
                 let calm = (5. * (angle - spin)).cos().max(0.).powi(12);
                 let race = (5. * (angle - spin - 3. * s.t)).cos().max(0.).powi(12);
                 let bead = calm * (1. - s.working()) + race * s.working();
@@ -743,6 +749,18 @@ fn rings(out: &mut Scene, s: State) {
             }
             previous = Some(point);
         }
+    }
+    if s.thinking() > 0. {
+        let u = fract(s.t * 0.3);
+        let r = 0.44 * (1. - u) + 0.05;
+        out.ellipse(
+            (0., 0.),
+            (r, r),
+            0.,
+            0.004,
+            0.5 * (PI * u).sin(),
+            Material::Dim,
+        );
     }
 }
 
@@ -848,11 +866,15 @@ fn eclipse(out: &mut Scene, s: State) {
         );
     }
 }
+// Thought gathers the nodes inward into a denser tangle, turning slowly, with signals
+// running along the links toward the centre. Work spreads the network, orbits it fast,
+// and fires signals outward.
 fn synapse(out: &mut Scene, s: State) {
+    let gather = 1. - 0.2 * s.thinking() + 0.08 * s.working();
     let points: Vec<_> = (0..38)
         .map(|i| {
-            let a = TAU * hash(i, 4.) + s.t * (0.08 + s.thinking() * 0.12 + s.working() * 0.48);
-            let r = (0.12 + 0.62 * hash(i, 7.).sqrt()) * (1. + 0.15 * s.voice());
+            let a = TAU * hash(i, 4.) + s.t * (0.08 + s.thinking() * 0.04 + s.working() * 0.48);
+            let r = (0.12 + 0.62 * hash(i, 7.).sqrt()) * (1. + 0.15 * s.voice()) * gather;
             let r = if s.pose == Pose::Speaking {
                 r * (0.7 + 0.3 * (6. * a).cos().abs())
             } else {
@@ -861,9 +883,10 @@ fn synapse(out: &mut Scene, s: State) {
             (r * a.cos(), r * a.sin())
         })
         .collect();
+    let reach = 0.32 * gather;
     for (i, &a) in points.iter().enumerate() {
         for (j, &b) in points.iter().enumerate().skip(i + 1) {
-            if (a.0 - b.0).hypot(a.1 - b.1) < 0.32 && (i + j) % 3 == 0 {
+            if (a.0 - b.0).hypot(a.1 - b.1) < reach && (i + j) % 3 == 0 {
                 out.line(
                     a,
                     b,
@@ -871,6 +894,27 @@ fn synapse(out: &mut Scene, s: State) {
                     0.3 + 0.3 * (s.t * 2. - j as f32).sin().max(0.),
                     Material::Dim,
                 );
+                let busy = s.thinking() + s.working();
+                if busy > 0. {
+                    let (inner, outer) = if a.0.hypot(a.1) < b.0.hypot(b.1) {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    };
+                    let (from, to) = if s.working() > 0. {
+                        (inner, outer)
+                    } else {
+                        (outer, inner)
+                    };
+                    let u = fract(s.t * (0.35 + 1.25 * s.working()) + hash(i * 38 + j, 9.));
+                    out.dot(
+                        mix(from.0, to.0, u),
+                        mix(from.1, to.1, u),
+                        0.008,
+                        0.75 * (PI * u).sin(),
+                        Material::Eye,
+                    );
+                }
             }
         }
         out.dot(
@@ -880,44 +924,6 @@ fn synapse(out: &mut Scene, s: State) {
             0.6 + 0.3 * (s.t * 1.2 + i as f32).sin().max(0.),
             s.material(),
         );
-    }
-}
-fn drop_scene(out: &mut Scene, s: State) {
-    for i in 0..1500 {
-        let a = TAU * fract(i as f32 * 0.7548777);
-        let u = fract(i as f32 * 0.5698403);
-        let taper = (PI * u).sin().powf(0.65);
-        let radius = (0.12 + 0.34 * taper) * (1. + 0.2 * s.band(i % 8));
-        let swirl = a
-            + s.t * (0.15 + 0.7 * s.thinking())
-            + u * TAU * s.thinking()
-            + s.working() * (u * 8.0 - s.t * 1.3);
-        let x = radius * swirl.cos();
-        let y = (u - 0.5) * 1.4 + 0.06 * swirl.sin();
-        let z = swirl.sin();
-        out.dot(
-            x,
-            y,
-            0.005,
-            0.25 + 0.45 * z.max(0.) + 0.15 * s.voice(),
-            if i % 5 == 0 {
-                Material::Eye
-            } else {
-                s.material()
-            },
-        );
-    }
-    if s.pose == Pose::Speaking {
-        for k in 0..8 {
-            let a = TAU * k as f32 / 8.;
-            out.line(
-                (0., -0.65),
-                (a.cos() * 0.52, -0.8 + a.sin() * 0.2),
-                0.004,
-                0.5,
-                s.material(),
-            );
-        }
     }
 }
 // OrbConcepts.drawWave: five translucent ribbons, outgoing/incoming voice
@@ -1059,21 +1065,32 @@ fn blackhole(out: &mut Scene, s: State) {
         }
     }
 }
+// Thought gathers the dust into tight clumps that turn slowly while a ring of light
+// closes in on the star. Work merges each ring into a planet, speeds the orbits and sends
+// a ring of light outward.
 fn accretion(out: &mut Scene, s: State) {
     out.dot(0., 0., 0.065 + 0.025 * s.voice(), 1., s.material());
+    let pace = 1. - 0.45 * s.thinking() + 1.4 * s.working();
+    let sharp = if s.thinking() > 0. { 7 } else { 3 };
     for ring in 0..6 {
         let r = 0.22 + ring as f32 * 0.1 + 0.018 * s.band(ring);
-        let a = s.t * (0.4 / (0.3 + r));
+        let a = s.t * (0.4 / (0.3 + r)) * pace;
         out.ellipse((0., 0.), (r, r * 0.38), 0.15, 0.004, 0.35, Material::Dim);
         for k in 0..90 {
             let q = TAU * k as f32 / 90. + a;
-            let clump = 0.4 + 0.6 * (q * (3. + ring as f32) - s.t * 0.3).cos().max(0.).powi(3);
+            let clump = 0.4
+                + 0.6
+                    * (q * (3. + ring as f32) - s.t * 0.3)
+                        .cos()
+                        .max(0.)
+                        .powi(sharp);
             let (x, y) = rotate(r * q.cos(), r * q.sin() * 0.38, 0.15);
             out.dot(
                 x,
                 y,
                 0.005 + 0.004 * clump * s.thinking(),
-                0.3 + 0.4 * clump + 0.20 * s.band(ring),
+                (0.3 + 0.4 * clump) * (1. - 0.35 * s.thinking() * (1. - clump))
+                    + 0.20 * s.band(ring),
                 s.material(),
             );
         }
@@ -1082,191 +1099,23 @@ fn accretion(out: &mut Scene, s: State) {
             out.dot(x, y, 0.018, 0.9, Material::Eye);
         }
     }
-}
-
-fn face_relief(x: f32, y: f32, mouth: f32) -> Option<f32> {
-    let head = (x / 0.45).powi(2) + ((y + 0.1) / 0.66).powi(2);
-    if head > 1. {
-        return None;
-    }
-    let z = 0.28 * (1. - head).sqrt()
-        + 0.12 * (-(x / 0.08).powi(2) - ((y - 0.02) / 0.24).powi(2)).exp();
-    let eyes = 0.065 * (-((x.abs() - 0.19) / 0.10).powi(2) - ((y + 0.19) / 0.065).powi(2)).exp();
-    let lips = 0.035 * (-(x / 0.19).powi(2) - ((y - 0.29) / 0.055).powi(2)).exp();
-    Some(
-        z - eyes + lips
-            - 0.11
-                * mouth
-                * (-(x / 0.16).powi(2) - ((y - 0.29) / (0.035 + 0.08 * mouth)).powi(2)).exp(),
-    )
-}
-fn portrait(out: &mut Scene, style: Style, s: State) {
-    let mouth = s.speaking() * (0.15 + 0.75 * s.level) * (0.5 + 0.5 * (s.t * 8.).sin());
-    let dx = 0.025 * (s.t * 0.29).sin() - 0.04 * s.listening() + 0.03 * s.thinking();
-    let dy = 0.01 * (s.t * 1.25).sin() - 0.035 * s.thinking()
-        + 0.025 * s.listening() * s.level * (s.t * 4.3).sin();
-    if matches!(style, Style::WatchContour | Style::WatchMembrane) {
-        let vertical = style == Style::WatchMembrane;
-        // Contour is horizontal engraved relief; Membrane is a vertical silk curtain.
-        for k in 0..40 {
-            let base = (k as f32 / 39. - 0.5) * 1.65;
-            let pts: Vec<_> = (0..90)
-                .map(|i| {
-                    let along = (i as f32 / 89. - 0.5) * 1.7;
-                    let (x, y) = if vertical {
-                        (base, along)
-                    } else {
-                        (along, base)
-                    };
-                    let relief = face_relief((x - dx) * 0.9, (y - dy) * 0.9, mouth).unwrap_or(0.);
-                    let outside = 1. - smooth(0., 0.13, relief);
-                    let ripple =
-                        (x * 6. - s.t * 2. + y * 3.).sin() * (0.005 + 0.045 * s.voice()) * outside;
-                    if vertical {
-                        (
-                            x + relief * 0.48 + 0.012 * (y * 8. + s.t).sin() * (1. - relief),
-                            y + ripple,
-                        )
-                    } else {
-                        (x, y - relief * 0.85 + ripple)
-                    }
-                })
-                .collect();
-            out.path(
-                &pts,
-                false,
-                0.004,
-                0.25 + 0.22 * (k as f32 / 40.),
-                if k % 7 == 0 {
-                    Material::Eye
-                } else {
-                    s.material()
-                },
-            );
-        }
-        // Lit lips, nose ridge and brows remain legible at small Canvas/terminal sizes.
-        let lips: Vec<_> = (0..22)
-            .map(|i| {
-                let x = (i as f32 / 21. - 0.5) * 0.38;
-                (x + dx, 0.27 + dy - 0.4 * x * x + mouth * 0.06)
-            })
-            .collect();
-        out.path(&lips, false, 0.008, 0.42, Material::Eye);
-        out.line(
-            (dx, -0.08 + dy),
-            (dx + 0.025, 0.09 + dy),
-            0.007,
-            0.42,
-            s.material(),
-        );
-    } else {
-        let imprint = style == Style::WatchImprint;
-        for i in 0..2300 {
-            let x = (fract(i as f32 * 0.7548777) - 0.5) * 1.02;
-            let y = (fract(i as f32 * 0.5698403) - 0.5) * 1.55;
-            if let Some(z) = face_relief(x, y, mouth) {
-                let epsilon = 0.006;
-                let zx = face_relief(x + epsilon, y, mouth).unwrap_or(z)
-                    - face_relief(x - epsilon, y, mouth).unwrap_or(z);
-                let zy = face_relief(x, y + epsilon, mouth).unwrap_or(z)
-                    - face_relief(x, y - epsilon, mouth).unwrap_or(z);
-                let nx = -zx / (epsilon * 2.);
-                let ny = -zy / (epsilon * 2.);
-                let norm = (1. + nx * nx + ny * ny).sqrt();
-                let light =
-                    (0.13 + 0.8 * ((-0.35 * nx - 0.4 * ny + 0.85) / norm).max(0.)).clamp(0., 1.);
-                let press = if imprint {
-                    0.05 + 0.95 * smooth(0.23 - 0.04 * s.voice(), 0.31 - 0.04 * s.voice(), z)
-                } else {
-                    1.
-                };
-                // Imprint reveals only the glass-contact relief; the face shows its lit volume.
-                let scale = if imprint { 1.20 } else { 1.0 };
-                out.dot(
-                    (x + dx) * scale,
-                    (y + dy) * scale,
-                    if imprint { 0.008 } else { 0.009 },
-                    light * press,
-                    s.material(),
-                );
-            }
-        }
-        for side in [-1., 1.] {
-            let ex = dx + side * 0.19;
-            if imprint {
-                let lid: Vec<_> = (0..20)
-                    .map(|i| {
-                        let x = (i as f32 / 19. - 0.5) * 0.18;
-                        (ex + x, dy - 0.18 + 0.9 * x * x)
-                    })
-                    .collect();
-                out.path(&lid, false, 0.009, 0.55, s.material());
-            } else {
-                out.ellipse(
-                    (ex, dy - 0.19),
-                    (0.085, 0.035),
-                    side * 0.05,
-                    0.008,
-                    0.42,
-                    Material::Dim,
-                );
-                let (px, py) = s.look((ex, dy - 0.19));
-                out.dot(px, py, 0.023, 0.8, Material::Eye);
-                out.dot(px - 0.008, py - 0.01, 0.009, 0.9, s.material());
-                out.line(
-                    (ex - 0.09, dy - 0.29),
-                    (ex + 0.07, dy - 0.28 - 0.02 * s.thinking()),
-                    0.012,
-                    0.65,
-                    s.material(),
-                );
-            }
-        }
-        let scale = if imprint { 1.2 } else { 1. };
-        let smile: Vec<_> = (0..36)
-            .map(|i| {
-                let x = (i as f32 / 35. - 0.5) * 0.4;
-                (
-                    (x + dx) * scale,
-                    (0.28 + dy - 0.35 * x * x + mouth * 0.04) * scale,
-                )
-            })
-            .collect();
-        out.path(&smile, false, 0.008, 0.6, Material::Eye);
-        if !imprint {
-            out.line((-0.12, 0.53), (-0.12, 0.70), 0.012, 0.42, s.material());
-            out.line((0.12, 0.53), (0.12, 0.70), 0.012, 0.42, s.material());
-            out.path(
-                &[
-                    (-0.48, 0.85),
-                    (-0.30, 0.72),
-                    (-0.12, 0.69),
-                    (0.12, 0.69),
-                    (0.30, 0.72),
-                    (0.48, 0.85),
-                ],
-                false,
-                0.012,
-                0.42,
-                s.material(),
-            );
+    if s.thinking() + s.working() > 0. {
+        let u = fract(s.t * (0.22 + 0.33 * s.working()));
+        let r = if s.working() > 0. {
+            0.12 + 0.62 * u
         } else {
-            out.line((-0.62, -0.76), (0.62, 0.76), 0.003, 0.08, Material::Dim);
-        }
-    }
-    if s.pose == Pose::Working {
-        let y = -0.65 + 1.2 * fract(s.t * 0.35);
-        let half = 0.45 * (1. - ((y + 0.1) / 0.66).powi(2)).max(0.).sqrt();
-        out.line(
-            (dx - half, y + dy),
-            (dx + half, y + dy),
-            0.012,
-            0.65,
+            0.74 - 0.62 * u
+        };
+        out.ellipse(
+            (0., 0.),
+            (r, r * 0.38),
+            0.15,
+            0.006,
+            0.55 * (PI * u).sin(),
             Material::Eye,
         );
     }
 }
-
 fn aurora(out: &mut Scene, s: State) {
     for layer in 0..3 {
         let f = layer as f32;
@@ -1535,9 +1384,15 @@ fn metal_body(out: &mut Scene, c: (f32, f32), rx: f32, ry: f32, n: usize, s: Sta
         );
     }
 }
-fn lamp(out: &mut Scene, c: (f32, f32), r: f32, s: State) {
-    out.dot(c.0, c.1, r, 0.55 + 0.4 * s.voice(), s.material());
-    out.dot(c.0 - r * 0.25, c.1 - r * 0.25, r * 0.25, 0.9, Material::Eye);
+fn lamp(out: &mut Scene, c: (f32, f32), r: f32, light: f32, s: State) {
+    out.dot(c.0, c.1, r, (0.55 + 0.4 * s.voice()) * light, s.material());
+    out.dot(
+        c.0 - r * 0.25,
+        c.1 - r * 0.25,
+        r * 0.25,
+        0.9 * light,
+        Material::Eye,
+    );
 }
 // OrbMachines.drawHover: opaque domed barrel, dark visor, articulated
 // shoulders and three soft engine plumes, suspended above a floor-light pool.
@@ -1760,306 +1615,123 @@ fn hover_machine(out: &mut Scene, s: State) {
         }
     }
 }
+// OrbRobots Rover and Spark: a tracked body, a neck and binocular eyes.
+// Thinking turns inward: the head sways slowly, the eyes look up and dim, and a focus ring
+// closes in on each eye. Working turns outward: the treads roll, the head bobs, and light
+// runs out from the middle of the chest bar to both ends.
 fn machine(out: &mut Scene, style: Style, s: State) {
+    let spark = style == Style::WatchSpark;
     let bob = 0.012 * (s.t * 0.85).sin() + 0.025 * s.listening() * (s.t * 1.05).sin();
     let cx = 0.025 * (s.t * 0.3).sin()
         + 0.08 * s.thinking() * (s.t * 0.7).sin()
         + 0.04 * s.working() * (s.t * 2.1).sin();
-    let top = -0.25 + bob + 0.035 * s.working() * (s.t * 3.).sin();
-    match style {
-        Style::WatchLens => {
-            metal_body(out, (0., 0.), 0.65, 0.65, 1300, s);
-            out.ellipse((0., 0.), (0.53, 0.53), 0., 0.022, 0.45, Material::Dim);
-            out.ellipse((0., 0.), (0.28, 0.28), 0., 0.016, 0.6, s.material());
-            lamp(
-                out,
-                s.look((cx, 0.05 * s.working() * (s.t * 2.).sin())),
-                0.16 + 0.025 * s.voice(),
-                s,
-            );
-            out.dot(-0.08, -0.08, 0.025, 1., Material::Eye);
+    let top = -0.25 + bob + 0.05 * s.working() * (s.t * 3.).sin() + 0.04 * s.thinking();
+    // Pensive eyes look up and to the side; they are pose-driven, not gaze.
+    let ponder = (
+        s.thinking() * 0.025 * (s.t * 0.45).sin(),
+        -s.thinking() * if spark { 0.03 } else { 0.04 },
+    );
+    let dim = 1. - s.thinking() * (0.5 - 0.12 * (s.t * 1.1).sin());
+    metal_body(
+        out,
+        (0., 0.30),
+        if spark { 0.38 } else { 0.46 },
+        0.22,
+        600,
+        s,
+    );
+    out.line((0., 0.08), (cx, top + 0.04), 0.022, 0.5, Material::Dim);
+    let roll = fract(s.t * 1.8) * s.working();
+    for side in [-1., 1.] {
+        let x = side * 0.48;
+        out.path(
+            &[
+                (x - 0.09, 0.17),
+                (x + 0.09, 0.17),
+                (x + 0.11, 0.63),
+                (x - 0.11, 0.63),
+            ],
+            true,
+            0.019,
+            0.18,
+            Material::Dim,
+        );
+        for k in 0..9 {
+            let y = 0.20 + (k as f32 + roll) * 0.048;
+            out.line((x - 0.075, y), (x + 0.075, y), 0.009, 0.23, Material::Dim);
         }
-        Style::WatchHover => hover_machine(out, s),
-        Style::WatchRover | Style::WatchSpark => {
-            let spark = style == Style::WatchSpark;
-            metal_body(
-                out,
-                (0., 0.30),
-                if spark { 0.38 } else { 0.46 },
-                0.22,
-                600,
-                s,
-            );
-            out.line((0., 0.08), (cx, top + 0.04), 0.022, 0.5, Material::Dim);
-            for side in [-1., 1.] {
-                let x = side * 0.48;
-                out.path(
-                    &[
-                        (x - 0.09, 0.17),
-                        (x + 0.09, 0.17),
-                        (x + 0.11, 0.63),
-                        (x - 0.11, 0.63),
-                    ],
-                    true,
-                    0.019,
-                    0.18,
-                    Material::Dim,
-                );
-                for k in 0..9 {
-                    let y = 0.20 + k as f32 * 0.048;
-                    out.line((x - 0.075, y), (x + 0.075, y), 0.009, 0.23, Material::Dim);
-                }
-                let ex = cx + side * if spark { 0.21 } else { 0.24 };
-                if spark {
-                    // Spark's characteristic boxy binocular shutters, unlike Rover's round lenses.
-                    let pts = [
-                        (ex - 0.17, top - 0.14),
-                        (ex + 0.16, top - 0.11),
-                        (ex + 0.18, top + 0.13),
-                        (ex - 0.16, top + 0.16),
-                    ];
-                    out.path(&pts, true, 0.016, 0.45, Material::Dim);
-                    for blade in 0..6 {
-                        let a = TAU * blade as f32 / 6. + 0.15 * s.thinking() * (s.t * 1.4).sin();
-                        let b = a + 0.85;
-                        out.line(
-                            (ex + 0.032 * a.cos(), top + 0.032 * a.sin()),
-                            (ex + 0.12 * b.cos(), top + 0.10 * b.sin()),
-                            0.011,
-                            0.6,
-                            s.material(),
-                        );
-                    }
-                    lamp(out, s.look((ex, top)), 0.027, s);
-                } else {
-                    metal_body(out, (ex, top), 0.18, 0.155, 300, s);
-                    out.ellipse((ex, top), (0.135, 0.118), 0., 0.011, 0.5, Material::Dim);
-                    lamp(out, s.look((ex, top)), 0.069, s);
-                }
-            }
-            out.line((-0.23, 0.29), (0.23, 0.29), 0.011, 0.4, s.material());
-            if spark {
+        // A pondering head turns a little aside, so its eyes draw together.
+        let spacing = if spark { 0.21 } else { 0.24 };
+        let ex = cx + side * spacing * (1. - 0.2 * s.thinking());
+        let eye = s.look((ex + ponder.0, top + ponder.1));
+        if spark {
+            // Spark's characteristic boxy binocular shutters, unlike Rover's round lenses.
+            let pts = [
+                (ex - 0.17, top - 0.14),
+                (ex + 0.16, top - 0.11),
+                (ex + 0.18, top + 0.13),
+                (ex - 0.16, top + 0.16),
+            ];
+            out.path(&pts, true, 0.016, 0.45, Material::Dim);
+            // The shutter blades close a little while thinking.
+            let inner = 0.032 + 0.03 * s.thinking();
+            for blade in 0..6 {
+                let a = TAU * blade as f32 / 6. + 0.15 * s.thinking() * (s.t * 1.4).sin();
+                let b = a + 0.85;
                 out.line(
-                    (-0.08, top - 0.15),
-                    (-0.13, top - 0.31),
-                    0.008,
-                    0.5,
-                    Material::Dim,
-                );
-                out.dot(-0.13, top - 0.31, 0.018, 0.8, s.material());
-            }
-        }
-        Style::WatchDome => {
-            metal_body(out, (cx, 0.05 + bob), 0.42, 0.55, 1100, s);
-            for side in [-1., 1.] {
-                out.line(
-                    (side * 0.4, -0.05),
-                    (side * 0.52, 0.53),
-                    0.045,
+                    (ex + inner * a.cos(), top + inner * a.sin()),
+                    (ex + 0.12 * b.cos(), top + 0.10 * b.sin()),
+                    0.011,
                     0.6,
-                    Material::Dim,
-                );
-                out.line(
-                    (side * 0.37, 0.55),
-                    (side * 0.6, 0.55),
-                    0.035,
-                    0.5,
-                    Material::Dim,
+                    s.material(),
                 );
             }
-            out.ellipse((cx, top), (0.4, 0.26), 0., 0.018, 0.65, s.material());
-            lamp(out, s.look((cx - 0.13, top)), 0.06, s);
-            for k in 0..4 {
-                lamp(out, (0.14, 0.04 + k as f32 * 0.1), 0.022, s);
-            }
+            lamp(out, eye, 0.027, dim, s);
+        } else {
+            metal_body(out, (ex, top), 0.18, 0.155, 300, s);
+            out.ellipse((ex, top), (0.135, 0.118), 0., 0.011, 0.5, Material::Dim);
+            lamp(out, eye, 0.069, dim, s);
         }
-        Style::WatchCruiser => {
-            for y in 0..35 {
-                let yy = y as f32 / 34.;
-                let w = 0.73 - 0.23 * (yy - 0.4).abs();
-                out.line(
-                    (-w, 0.12 + yy * 0.35),
-                    (w, 0.12 + yy * 0.35),
-                    0.005,
-                    0.2 + 0.25 * yy,
-                    Material::Dim,
-                );
-            }
-            let shell = [(-0.73, 0.13), (-0.45, -0.22), (0.38, -0.22), (0.72, 0.13)];
-            out.path(&shell, false, 0.013, 0.75, Material::Dim);
-            out.line((-0.32, -0.13), (0.3, -0.13), 0.008, 0.45, Material::Eye);
-            let scan = 0.42 * (s.t * (1. + s.thinking() * 1.4 + s.working() * 3.0)).sin();
-            out.line(
-                (scan - 0.09, 0.22),
-                (scan + 0.09, 0.22),
-                0.025,
-                0.9,
+        if s.thinking() > 0. {
+            let u = fract(s.t * 0.42 + side * 0.25);
+            let r = 0.17 - 0.10 * u;
+            out.ellipse(
+                (ex, top),
+                (r, r * 0.88),
+                0.,
+                0.006,
+                0.8 * (PI * u).sin(),
                 s.material(),
             );
-            // The voice illuminates individual dashboard bands, independently of scanner motion.
-            for band in 0..7 {
-                let x = (band as f32 - 3.0) * 0.055;
-                let height = 0.015 + 0.08 * s.band(band);
-                out.line(
-                    (x, -0.17),
-                    (x, -0.17 - height),
-                    0.006,
-                    0.25 + 0.6 * s.voice(),
-                    s.material(),
-                );
-            }
-            for side in [-1., 1.] {
-                out.ellipse(
-                    (side * 0.5, 0.48),
-                    (0.12, 0.10),
-                    0.,
-                    0.035,
-                    0.6,
-                    Material::Dim,
-                );
-            }
         }
-        _ => {
-            let (rx, ry) = match style {
-                Style::WatchValet => (0.24, 0.34),
-                Style::WatchRetro => (0.36, 0.27),
-                Style::WatchDeco => (0.24, 0.38),
-                Style::WatchAndroid => (0.28, 0.39),
-                _ => (0.34, 0.38),
-            };
-            metal_body(out, (cx, top), rx, ry, 900, s);
-            metal_body(out, (0., 0.40), 0.40, 0.20, 400, s);
-            out.line((cx, top + ry), (0., 0.25), 0.035, 0.5, Material::Dim);
-            if style == Style::WatchSentinel {
-                out.line(
-                    (cx - rx * 0.8, top),
-                    (cx + rx * 0.8, top),
-                    0.025,
-                    0.6,
-                    Material::Dim,
-                );
-                lamp(
-                    out,
-                    (
-                        cx + rx * 0.5 * (s.t * (0.7 + s.thinking() + s.working() * 2.)).sin(),
-                        top,
-                    ),
-                    0.045,
-                    s,
-                );
-                out.path(
-                    &[
-                        (-0.24, top + 0.06),
-                        (-0.18, top + 0.23),
-                        (0.18, top + 0.23),
-                        (0.24, top + 0.06),
-                    ],
-                    false,
-                    0.014,
-                    0.75,
-                    Material::Dim,
-                );
-            } else {
-                for side in [-1., 1.] {
-                    let eyes = if style == Style::WatchRetro {
-                        0.11
-                    } else {
-                        0.05
-                    };
-                    lamp(out, s.look((cx + side * rx * 0.48, top - 0.03)), eyes, s);
-                }
-                let width = if style == Style::WatchRetro {
-                    0.19
-                } else {
-                    0.10
-                };
-                out.line(
-                    (cx - width, top + 0.15),
-                    (cx + width, top + 0.15),
-                    0.01 + 0.012 * s.voice(),
-                    0.55,
-                    s.material(),
-                );
-            }
-            match style {
-                Style::WatchValet => {
-                    for side in [-1., 1.] {
-                        let reach = 0.55 + 0.08 * s.thinking();
-                        out.line(
-                            (side * 0.28, 0.28),
-                            (side * reach, 0.10 + 0.05 * (s.t * 2.).sin()),
-                            0.018,
-                            0.7,
-                            s.material(),
-                        );
-                        out.dot(side * reach, 0.10, 0.04, 0.7, s.material());
-                    }
-                    out.line(
-                        (-0.17, top + ry * 0.85),
-                        (0.17, top + ry * 0.85),
-                        0.012,
-                        0.8,
-                        Material::Eye,
-                    );
-                }
-                Style::WatchRetro => {
-                    out.ellipse(
-                        (cx, top - 0.13),
-                        (0.38, 0.22),
-                        0.,
-                        0.012,
-                        0.75,
-                        s.material(),
-                    );
-                    out.line((-0.42, 0.26), (-0.55, 0.60), 0.04, 0.7, Material::Dim);
-                    out.line((0.42, 0.26), (0.55, 0.60), 0.04, 0.7, Material::Dim);
-                    for i in -2..=2 {
-                        out.line(
-                            (i as f32 * 0.045, 0.30),
-                            (i as f32 * 0.045, 0.45),
-                            0.008,
-                            0.6,
-                            s.material(),
-                        );
-                    }
-                }
-                Style::WatchDeco => {
-                    for i in 0..5 {
-                        let y = top - ry + 0.05 + i as f32 * 0.09;
-                        out.ellipse((cx, y), (0.27, 0.05), 0., 0.005, 0.5, s.material());
-                    }
-                    for side in [-1., 1.] {
-                        out.line(
-                            (side * 0.32, 0.24),
-                            (side * 0.21, 0.61),
-                            0.014,
-                            0.65,
-                            s.material(),
-                        );
-                    }
-                }
-                Style::WatchAndroid => {
-                    out.ellipse((cx, top), (0.32, 0.45), 0., 0.008, 0.55, s.material());
-                    out.line(
-                        (cx, top - 0.18),
-                        (cx, top + 0.07),
-                        0.004,
-                        0.45,
-                        Material::Dim,
-                    );
-                }
-                _ => {}
+    }
+    out.line((-0.23, 0.29), (0.23, 0.29), 0.011, 0.4, s.material());
+    if s.working() > 0. {
+        for k in 0..2 {
+            let u = fract(s.t * 1.6 + k as f32 * 0.5);
+            for side in [-1., 1.] {
+                out.dot(side * 0.23 * u, 0.29, 0.02, 0.9 * (1. - u), Material::Eye);
             }
         }
     }
+    if spark {
+        out.line(
+            (-0.08, top - 0.15),
+            (-0.13, top - 0.31),
+            0.008,
+            0.5,
+            Material::Dim,
+        );
+        let beacon = if s.working() > 0. {
+            0.35 + 0.6 * ((s.t * 5.).floor() as i32 % 2) as f32
+        } else {
+            0.8
+        };
+        out.dot(-0.13, top - 0.31, 0.018, beacon, s.material());
+    }
     if s.pose == Pose::Error {
         for side in [-1., 1.] {
-            let x = if style == Style::WatchLens {
-                0.
-            } else {
-                cx + side * 0.12
-            };
-            let y = if style == Style::WatchLens { 0. } else { top };
+            let (x, y) = (cx + side * 0.12, top);
             out.line(
                 (x - 0.05, y - 0.05),
                 (x + 0.05, y + 0.05),
@@ -2365,7 +2037,7 @@ mod tests {
             Pose::Listening,
             0.,
             1.,
-            [0.; 8],
+            Some([0.; 8]),
             (0., 0.),
         );
         let loud = build(
@@ -2373,7 +2045,7 @@ mod tests {
             Pose::Listening,
             1.,
             1.,
-            [1.; 8],
+            Some([1.; 8]),
             (0., 0.),
         );
         let radius = |scene: &Scene| {
@@ -2387,16 +2059,85 @@ mod tests {
         assert!(radius(&loud) > radius(&quiet) * 1.15);
         assert!(radius(&loud) < 1.15);
         for pose in [Pose::Ready, Pose::Thinking] {
-            let a = build(Style::IphoneWeave, pose, 0., 1., [0.; 8], (0., 0.));
-            let b = build(Style::IphoneWeave, pose, 1., 1., [1.; 8], (0., 0.));
+            let a = build(Style::IphoneWeave, pose, 0., 1., Some([0.; 8]), (0., 0.));
+            let b = build(Style::IphoneWeave, pose, 1., 1., Some([1.; 8]), (0., 0.));
             assert_eq!(radius(&a), radius(&b));
         }
     }
 
     #[test]
+    fn each_ring_follows_its_own_band_or_a_derived_spread() {
+        let state = |pose, level, t, bands: Option<[f32; 8]>| State {
+            pose,
+            level,
+            t,
+            bands: bands.unwrap_or([level; 8]),
+            measured: bands.is_some(),
+            gaze: (0., 0.),
+        };
+        // Measured: the low bands drive only the first rings, the high bands only the last.
+        let low = ring_drive(state(
+            Pose::Speaking,
+            0.6,
+            2.,
+            Some([1., 1., 0., 0., 0., 0., 0., 0.]),
+        ));
+        assert_eq!(low, [1., 0.5, 0., 0., 0., 0.]);
+        let high = ring_drive(state(
+            Pose::Listening,
+            0.6,
+            2.,
+            Some([0., 0., 0., 0., 0., 0., 1., 1.]),
+        ));
+        assert_eq!(high, [0., 0., 0., 0., 0.5, 1.]);
+        // Level only: a derived spread, bounded by the level, so the rings move one by one
+        // (on most frames they differ; a shared pause now and then is speech-like).
+        let spread = (0..200)
+            .filter(|k| {
+                let d = ring_drive(state(Pose::Speaking, 0.8, *k as f32 * 0.37, None));
+                assert!(d.iter().all(|v| (0.0..=0.8).contains(v)), "{d:?}");
+                d.iter().fold(0f32, |m, v| m.max(*v)) - d.iter().fold(1f32, |m, v| m.min(*v)) > 0.1
+            })
+            .count();
+        assert!(
+            spread > 160,
+            "rings move together on {} of 200 frames",
+            200 - spread
+        );
+        assert_ne!(
+            ring_drive(state(Pose::Speaking, 0.8, 1., None)),
+            ring_drive(state(Pose::Speaking, 0.8, 1.2, None))
+        );
+        assert_eq!(ring_drive(state(Pose::Speaking, 0., 1., None)), [0.; 6]);
+        for pose in [Pose::Ready, Pose::Thinking, Pose::Working, Pose::Waiting] {
+            assert_eq!(ring_drive(state(pose, 1., 1., Some([1.; 8]))), [0.; 6]);
+        }
+        // And the geometry answers: one band moves the picture differently from another.
+        let ends = |bands| {
+            build(
+                Style::WatchRings,
+                Pose::Speaking,
+                0.6,
+                2.,
+                Some(bands),
+                (0., 0.),
+            )
+            .strokes
+            .iter()
+            .map(|s| s.a)
+            .collect::<Vec<_>>()
+        };
+        let mut only = [0.; 8];
+        only[0] = 1.;
+        let mut other = [0.; 8];
+        other[7] = 1.;
+        assert_ne!(ends(only), ends(other));
+    }
+
+    #[test]
     fn scenes_are_bounded_and_every_style_has_geometry() {
-        for st in Style::ALL.into_iter().skip(6) {
-            let scene = build(st, Pose::Speaking, 0.6, 1.1, [0.6; 8], (0., 0.));
+        for st in Style::ALL.into_iter().filter(|s| !s.analytic()) {
+            let scene = build(st, Pose::Speaking, 0.6, 1.1, Some([0.6; 8]), (0., 0.));
             assert!(!scene.strokes.is_empty(), "{st:?}");
             assert!(
                 scene.strokes.len() + scene.surfaces.len() < MAX_PRIMITIVES,
@@ -2419,7 +2160,7 @@ mod tests {
             Pose::Thinking,
             0.6,
             1.,
-            [0.; 8],
+            Some([0.; 8]),
             (0., 0.),
         );
         let n = scene.strokes.len();
@@ -2475,14 +2216,21 @@ mod tests {
             Pose::Speaking,
             0.6,
             2.3,
-            [0.6; 8],
+            Some([0.6; 8]),
             (0., 0.),
         );
         assert!(
             wave.surfaces.len() > 500,
             "wave ribbons have translucent bodies"
         );
-        let hover = build(Style::WatchHover, Pose::Ready, 0., 2.3, [0.; 8], (0., 0.));
+        let hover = build(
+            Style::WatchHover,
+            Pose::Ready,
+            0.,
+            2.3,
+            Some([0.; 8]),
+            (0., 0.),
+        );
         assert!(
             hover.surfaces.len() > 15,
             "shell, visor, engines and eyes are surfaces"
@@ -2494,7 +2242,7 @@ mod tests {
             Pose::Speaking,
             0.6,
             2.3,
-            [0.6; 8],
+            Some([0.6; 8]),
             (0., 0.),
         );
         assert!(

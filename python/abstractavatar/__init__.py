@@ -9,8 +9,8 @@ import sys
 import threading
 from typing import Any
 
-__version__ = "0.1.1"
-__all__ = ["Renderer", "catalog", "validate_descriptor", "__version__"]
+__version__ = "0.2.0"
+__all__ = ["Renderer", "catalog", "retired", "resolve_style", "validate_descriptor", "__version__"]
 _STATES = ("ready", "thinking", "working", "listening", "speaking", "waiting", "error")
 _LIBRARIES: dict[str, Any] = {}
 _LIBRARY_LOCK = threading.RLock()
@@ -31,6 +31,10 @@ def _library(library_path: str | Path | None = None):
             "avatar_style_count": ([], C.c_uint32),
             "avatar_style_field_ptr": ([C.c_uint32] * 2, C.c_void_p),
             "avatar_style_field_len": ([C.c_uint32] * 2, C.c_size_t),
+            "avatar_default_style": ([], C.c_uint32),
+            "avatar_retired_count": ([], C.c_uint32),
+            "avatar_retired_field_ptr": ([C.c_uint32] * 2, C.c_void_p),
+            "avatar_retired_field_len": ([C.c_uint32] * 2, C.c_size_t),
             "avatar_create": ([C.c_uint32] * 2, C.c_uint32),
             "avatar_set_shade": ([C.c_uint32] * 4, C.c_int32),
             "avatar_set_ground": ([C.c_uint32] * 2, C.c_int32),
@@ -63,11 +67,7 @@ def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
     for code in range(count):
         record: dict[str, Any] = {"code": code}
         for field, name in enumerate(("id", "name", "description", "watch_code", "family", "gaze")):
-            length = int(lib.avatar_style_field_len(code, field))
-            pointer = lib.avatar_style_field_ptr(code, field)
-            if length > 512 or (length and not pointer):
-                raise RuntimeError("Invalid AbstractAvatar catalog field")
-            record[name] = C.string_at(pointer, length).decode("utf-8") if length else ""
+            record[name] = _text(lib, "avatar_style_field", code, field)
         if not record["id"] or record["id"] in seen:
             raise RuntimeError("Invalid or duplicated AbstractAvatar style identifier")
         if record["gaze"] not in ("eyes", "none"):
@@ -76,6 +76,43 @@ def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
         seen.add(record["id"])
         out.append(record)
     return out
+
+
+def _text(lib, prefix: str, index: int, field: int) -> str:
+    length = int(getattr(lib, prefix + "_len")(index, field))
+    pointer = getattr(lib, prefix + "_ptr")(index, field)
+    if length > 512 or (length and not pointer):
+        raise RuntimeError("Invalid AbstractAvatar catalog field")
+    return C.string_at(pointer, length).decode("utf-8") if length else ""
+
+
+def retired(library_path: str | Path | None = None) -> list[dict[str, Any]]:
+    """Return the designs removed from the catalog. Their ids stay reserved and resolve to
+    ``replacement``, or to the default design when ``replacement`` is ``None``."""
+    lib = _library(library_path)
+    count = int(lib.avatar_retired_count())
+    if count > 256:
+        raise RuntimeError("AbstractAvatar retired list exceeds the supported bounds")
+    out = []
+    for index in range(count):
+        record = {name: _text(lib, "avatar_retired_field", index, field) for field, name in enumerate(("id", "replacement", "retired_in", "date", "reason"))}
+        record["replacement"] = record["replacement"] or None
+        out.append(record)
+    return out
+
+
+def resolve_style(style: str, library_path: str | Path | None = None) -> str:
+    """Return the active design id to draw for a stored id: the id itself when it is active,
+    a retired id's replacement, otherwise the default design (``halo``). Never fails for a
+    string, so a stored identity that names a removed avatar still renders."""
+    if not isinstance(style, str):
+        raise ValueError("Avatar style must be a string")
+    lib = _library(library_path)
+    active = [record["id"] for record in catalog(library_path)]
+    if style in active:
+        return style
+    replacement = next((r["replacement"] for r in retired(library_path) if r["id"] == style), None)
+    return replacement if replacement in active else active[int(lib.avatar_default_style())]
 
 
 def _number(value: Any, lo: float, hi: float, name: str) -> float:
@@ -149,6 +186,7 @@ class Renderer:
         self.width, self.height = width, height
         self._lock = threading.RLock()
         self._library = _library(library_path)
+        self._library_path = library_path
         self._styles = {r["id"]: r["code"] for r in catalog(library_path)}
         self._handle = int(self._library.avatar_create(width, height))
         if not self._handle:
@@ -183,7 +221,12 @@ class Renderer:
                     self._check(self._library.avatar_set_shade(self._handle, material, shade, int.from_bytes(bytes((*rgb, 255)), "big")))
 
     def render(self, style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True, bands=None) -> bytes:
-        """Return owned, tightly packed, straight-alpha RGBA8 bytes."""
+        """Return owned, tightly packed, straight-alpha RGBA8 bytes.
+
+        A retired or unknown ``style`` renders its replacement or the default design
+        (see :func:`resolve_style`)."""
+        if isinstance(style, str) and style not in self._styles:
+            style = resolve_style(style, self._library_path)
         desc = {"schema_version": 1, "style": style, "state": state, "time": time, "level": level, "gaze": gaze}
         if bands is not None:
             desc["bands"] = bands
@@ -201,7 +244,7 @@ class Renderer:
             return self._buffer.raw
 
     def render_descriptor(self, descriptor: dict[str, Any] | str, *, transparent: bool = True) -> bytes:
-        frame = validate_descriptor(descriptor, styles=set(self._styles))
+        frame = validate_descriptor(descriptor)
         return self.render(style=frame["style"], state=frame["state"], time=frame["time"], level=frame["level"], gaze=frame.get("gaze", (0, 0)), bands=frame.get("bands"), transparent=transparent)
 
     def close(self):

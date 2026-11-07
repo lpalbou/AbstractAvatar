@@ -63,8 +63,10 @@ impl Descriptor {
         if self.schema_version != 1 {
             return Err("Unsupported avatar schema_version".into());
         }
-        if AvatarStyle::from_id(&self.style).is_none() {
-            return Err("Unknown avatar style".into());
+        // Any bounded id is accepted: retired and unknown ids resolve to a drawable
+        // design (AvatarStyle::resolve), so a stored identity never fails to render.
+        if self.style.is_empty() || self.style.len() > 64 {
+            return Err("Avatar style must be a nonempty id of at most 64 bytes".into());
         }
         if AvatarPose::from_id(&self.state).is_none() {
             return Err("Unknown avatar state".into());
@@ -92,13 +94,13 @@ impl Descriptor {
     pub fn frame(&self) -> Result<Frame, String> {
         self.validate()?;
         let gaze = self.gaze.unwrap_or([0., 0.]);
-        Ok(Frame::with_bands(
-            AvatarStyle::from_id(&self.style).unwrap(),
+        Ok(Frame::build(
+            AvatarStyle::resolve(&self.style),
             AvatarPose::from_id(&self.state).unwrap(),
             self.level,
             self.time,
             Gaze::new(gaze[0], gaze[1]),
-            self.bands.unwrap_or([self.level; 8]),
+            self.bands,
         ))
     }
 }
@@ -125,7 +127,11 @@ mod tests {
             good.replace("\"schema_version\":1", "\"schema_version\":2"),
             good.replace("\"time\":1.2", "\"time\":-1"),
             good.replace("\"level\":0.5", "\"level\":NaN"),
-            good.replace("\"style\":\"halo\"", "\"style\":\"future\""),
+            good.replace("\"style\":\"halo\"", "\"style\":\"\""),
+            good.replace(
+                "\"style\":\"halo\"",
+                &format!("\"style\":\"{}\"", "x".repeat(65)),
+            ),
             good.replace("\"state\":\"ready\"", "\"state\":\"running\""),
             good.replace("\"level\":0.5", "\"level\":0.5,\"script\":\"alert(1)\""),
             good.replace("\"level\":0.5", "\"level\":0.5,\"bands\":[0.1]"),
@@ -133,5 +139,34 @@ mod tests {
             assert!(Descriptor::from_json(&bad).is_err(), "{bad}");
         }
         assert!(Descriptor::from_json(&" ".repeat(MAX_DESCRIPTOR_BYTES + 1)).is_err());
+    }
+    #[test]
+    fn retired_and_unknown_styles_render_their_documented_fallback() {
+        let request = |style: &str| {
+            format!(
+                r#"{{"schema_version":1,"style":"{style}","state":"speaking","time":1.2,"level":0.5}}"#
+            )
+        };
+        let pixels = |style: &str| {
+            let frame = Descriptor::from_json(&request(style))
+                .unwrap()
+                .frame()
+                .unwrap();
+            let palette = [[0xffffffff; 256]; 3];
+            (0..32 * 32)
+                .map(|i| {
+                    let (x, y) = ((i % 32) as f32 / 16. - 1., (i / 32) as f32 / 16. - 1.);
+                    frame.rgba(x, y, 1. / 16., &palette)
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(pixels("future"), pixels("halo"));
+        assert_eq!(pixels("watch-face"), pixels("halo"));
+        assert_eq!(pixels("watch-lens"), pixels("watch-hover"));
+        assert_eq!(pixels("eye"), pixels("watch-eye"));
+        assert!(
+            pixels("watch-face").iter().any(|p| p[3] > 0),
+            "fallback is never blank"
+        );
     }
 }

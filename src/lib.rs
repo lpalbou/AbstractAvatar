@@ -51,7 +51,7 @@ impl AvatarPose {
     }
 }
 mod catalog;
-pub use catalog::AvatarStyle;
+pub use catalog::{AvatarStyle, RetiredStyle, RETIRED};
 #[cfg(feature = "json")]
 pub mod descriptor;
 mod raster;
@@ -153,9 +153,14 @@ impl Frame {
             raster::Color::from_sample(self.sample(x, y), palette).rgba()
         }
     }
+    /// A frame driven by one audio level. Band-aware designs derive a plausible spread of
+    /// motion from the level and time (see [`Self::with_bands`]).
     pub fn new(style: AvatarStyle, pose: AvatarPose, level: f32, time: f32, gaze: Gaze) -> Self {
-        Self::with_bands(style, pose, level, time, gaze, [level; 8])
+        Self::build(style, pose, level, time, gaze, None)
     }
+    /// A frame driven by eight measured audio bands (low to high frequency, each 0..1) as
+    /// well as the level. Designs with per-band parts, such as `watch-rings`, move each part
+    /// with its own band.
     pub fn with_bands(
         style: AvatarStyle,
         pose: AvatarPose,
@@ -163,6 +168,16 @@ impl Frame {
         time: f32,
         gaze: Gaze,
         bands: [f32; 8],
+    ) -> Self {
+        Self::build(style, pose, level, time, gaze, Some(bands))
+    }
+    pub(crate) fn build(
+        style: AvatarStyle,
+        pose: AvatarPose,
+        level: f32,
+        time: f32,
+        gaze: Gaze,
+        bands: Option<[f32; 8]>,
     ) -> Self {
         let level = if level.is_finite() {
             level.clamp(0., 1.)
@@ -182,8 +197,8 @@ impl Frame {
         } else {
             Gaze::default()
         };
-        let bands = bands.map(|x| if x.is_finite() { x.clamp(0., 1.) } else { 0. });
-        let scene = if style.code() >= 6 {
+        let bands = bands.map(|b| b.map(|x| if x.is_finite() { x.clamp(0., 1.) } else { 0. }));
+        let scene = if !style.analytic() {
             Some(std::sync::Arc::new(scenes::build(
                 style,
                 pose,
@@ -291,7 +306,6 @@ fn sample_inner(
         AvatarStyle::Hover => hover(pose, level, time, x, y, m),
         AvatarStyle::Vortex => vortex(pose, level, time, x, y, m),
         AvatarStyle::Eclipse => eclipse(pose, level, time, x, y, m),
-        AvatarStyle::Eye => eye(pose, level, time, x, y, m),
         AvatarStyle::Rover => rover(pose, level, time, x, y, m),
         _ => unreachable!("scene styles are dispatched before analytic sampling"),
     }
@@ -629,8 +643,7 @@ fn hover(p: AvatarPose, level: f32, time: f32, x: f32, y: f32, m: &Materials) ->
     }
 }
 
-// Watch references: Orb.swift vortex arms, OrbConcepts Eclipse, OrbAvatars Eye,
-// OrbRobots Rover. Adapted to a bounded analytic field for terminal and Canvas.
+// Watch references: Orb.swift vortex arms, OrbConcepts Eclipse, OrbRobots Rover. Adapted to a bounded analytic field for terminal and Canvas.
 fn vortex(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sample {
     let r = x.hypot(y);
     let a = y.atan2(x);
@@ -690,8 +703,15 @@ fn eclipse(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> 
         rays
     };
     let corona = glow(r - radius, 0.16 + 0.13 * work + level * 0.05);
-    let orbit = if matches!(p, AvatarPose::Thinking | AvatarPose::Working) {
-        glow((x * x + (y * 1.8).powi(2)).sqrt() - 0.78, 0.018) * (0.5 + 0.5 * (a - t * 1.8).cos())
+    // Thought is a slow orbit around the disc; work turns the rays and sends flares out.
+    let orbit = if p == AvatarPose::Thinking {
+        glow((x * x + (y * 1.8).powi(2)).sqrt() - 0.78, 0.018) * (0.5 + 0.5 * (a - t * 0.9).cos())
+    } else {
+        0.
+    };
+    let flare = if p == AvatarPose::Working {
+        let u = (t * 0.9).fract();
+        glow(r - (radius + 0.06 + 0.4 * u), 0.03) * (1. - u) * 0.5 * (0.4 + 0.6 * work)
     } else {
         0.
     };
@@ -706,7 +726,7 @@ fn eclipse(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> 
     } else {
         0.
     };
-    let light = (0.85 * rim + 0.48 * corona + orbit + flow).min(1.)
+    let light = (0.85 * rim + 0.48 * corona + orbit + flare + flow).min(1.)
         * if p == AvatarPose::Waiting {
             0.5 + 0.23 * (t * 3.).sin()
         } else {
@@ -717,87 +737,6 @@ fn eclipse(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> 
     } else {
         m.paint(m.state(p), light, 1.)
     }
-}
-fn eye(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sample {
-    let open = match p {
-        AvatarPose::Listening => 1.12,
-        AvatarPose::Waiting => 0.5,
-        AvatarPose::Error => 0.85,
-        _ => blink(t, 5.3, 0.16),
-    };
-    let yy = y / open.max(0.16);
-    let shape = (x / 0.89).powi(2) + (yy / 0.52).powi(2);
-    if shape > 1.12 {
-        return m.ground();
-    }
-    let gx = match p {
-        AvatarPose::Thinking => (t * 1.2).sin() * 0.23,
-        AvatarPose::Working => (t * 2.0).sin() * 0.17,
-        AvatarPose::Listening => -0.13,
-        AvatarPose::Ready => 0.028 * (t * 0.9).sin() + m.gaze.offset().0,
-        _ => 0.,
-    };
-    let gy = if p == AvatarPose::Listening {
-        -0.06
-    } else {
-        m.gaze.offset().1 / open.max(0.16)
-    };
-    let d = (x - gx).hypot(yy - gy);
-    let radius = 0.26
-        + if p == AvatarPose::Speaking {
-            level * 0.025 + speech(t) * 0.018
-        } else {
-            0.
-        };
-    let coverage = soft(shape - 1., 0.12);
-    if d < radius {
-        if p == AvatarPose::Error {
-            let cross = glow(
-                segment(x - gx, yy - gy, -0.14, -0.14, 0.14, 0.14).min(segment(
-                    x - gx,
-                    yy - gy,
-                    -0.14,
-                    0.14,
-                    0.14,
-                    -0.14,
-                )),
-                0.025,
-            );
-            return if cross > 0.04 {
-                m.paint(&m.eye, 0.65 + 0.09 * cross, coverage)
-            } else {
-                m.paint(&m.dim, 0.08, coverage)
-            };
-        }
-        if d < 0.10 {
-            return m.paint(&m.dim, 0.06, coverage);
-        }
-        if (x - gx + 0.065).hypot(yy - gy + 0.075) < 0.048 {
-            return m.paint(&m.warm, 1., coverage);
-        }
-        let a = (yy - gy).atan2(x - gx);
-        let iris = 0.43 + 0.2 * (a * 20. + t * 0.3).sin() + glow(d - radius, 0.04) * 0.28;
-        let scan = if p == AvatarPose::Working {
-            (a - t * 3.).cos().max(0.).powf(8.) * 0.3
-        } else {
-            0.
-        };
-        return m.paint(
-            m.state(p),
-            (iris + scan + level * 0.2).min(1.)
-                * if p == AvatarPose::Waiting {
-                    0.72 + 0.22 * (t * 3.0).sin()
-                } else {
-                    1.0
-                },
-            coverage,
-        );
-    }
-    m.paint(
-        &m.warm,
-        (0.75 - 0.28 * shape - 0.12 * yy).clamp(0., 1.),
-        coverage,
-    )
 }
 fn rover(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sample {
     let lean = if p == AvatarPose::Listening {
@@ -836,15 +775,13 @@ fn rover(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sa
                     m.paint(&m.dim, 0.08, 1.0)
                 };
             }
-            let iris = (dx / 0.19).powi(2)
-                + (dy
-                    / (0.19
-                        * if p == AvatarPose::Waiting {
-                            0.5
-                        } else {
-                            blink(t, 5.1, 0.16).max(0.15)
-                        }))
-                .powi(2);
+            // Thinking: half-lidded eyes looking up; the lid stays put while pupils drift.
+            let lid = match p {
+                AvatarPose::Waiting => 0.5,
+                AvatarPose::Thinking => 0.62,
+                _ => blink(t, 5.1, 0.16).max(0.15),
+            };
+            let iris = (dx / 0.19).powi(2) + (dy / (0.19 * lid)).powi(2);
             if iris < 1. {
                 let gaze = m.gaze.offset().0
                     + if p == AvatarPose::Thinking {
@@ -852,7 +789,8 @@ fn rover(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sa
                     } else {
                         0.
                     };
-                if (dx - gaze).hypot(dy - m.gaze.offset().1) < 0.075 {
+                let up = if p == AvatarPose::Thinking { -0.05 } else { 0. };
+                if (dx - gaze).hypot(dy - m.gaze.offset().1 - up) < 0.075 {
                     return m.paint(&m.dim, 0.1, 1.);
                 }
                 return m.paint(
@@ -885,10 +823,16 @@ fn rover(p: AvatarPose, level: f32, t: f32, x: f32, y: f32, m: &Materials) -> Sa
             return m.paint(
                 m.state(p),
                 0.3 + 0.5
-                    * if p == AvatarPose::Speaking {
-                        speech(t)
-                    } else {
-                        0.45 + 0.2 * (t * 2.).sin()
+                    * match p {
+                        AvatarPose::Speaking => speech(t),
+                        // Work runs lights from the middle of the bar to both ends.
+                        AvatarPose::Working => {
+                            let u = (x.abs() / 0.32 - t * 1.6).rem_euclid(0.5) * 2.;
+                            0.2 + 0.8 * (1. - u).powi(3)
+                        }
+                        // Thought dims the bar to a slow glow.
+                        AvatarPose::Thinking => 0.25 + 0.1 * (t * 1.1).sin(),
+                        _ => 0.45 + 0.2 * (t * 2.).sin(),
                     },
                 1.,
             );
@@ -973,7 +917,6 @@ mod tests {
         for (style, x, y, diagonal, scale) in [
             (AvatarStyle::Hover, 0.27, 0.035, 0.05, 1.0),
             (AvatarStyle::Rover, 0.31, -0.43, 0.07, 1.0),
-            (AvatarStyle::Eye, 0.0, 0.0, 0.07, 0.85),
         ] {
             let center = sample(style, AvatarPose::Error, 0.0, 0.0, x, y);
             assert_eq!(center.material, Material::Eye);
@@ -1051,10 +994,61 @@ mod tests {
             (-GAZE_REACH[0], GAZE_REACH[1])
         );
     }
+    /// Thinking (inward, contemplative) and working (outward, busy) must read as different
+    /// animations, not one motion at another moment: every thinking frame must stay
+    /// measurably far from the nearest working frame at any time in an 8 s window.
+    #[test]
+    fn thinking_and_working_are_different_animations() {
+        let mut palette = [[0u32; 256]; 3];
+        for i in 0..256u32 {
+            let ramp = |r: u32, g: u32, b: u32| {
+                (r * i / 255) << 24 | (g * i / 255) << 16 | (b * i / 255) << 8 | 0xff
+            };
+            palette[0][i as usize] = ramp(255, 60, 0);
+            palette[1][i as usize] = ramp(0, 255, 60);
+            palette[2][i as usize] = ramp(60, 0, 255);
+        }
+        let draw = |style, pose, t: f32| {
+            let frame = Frame::new(style, pose, 0.5, t, Gaze::default());
+            (0..32 * 32)
+                .flat_map(|i| {
+                    let (x, y) = ((i % 32) as f32 + 0.5, (i / 32) as f32 + 0.5);
+                    let [r, g, b, a] = frame.rgba(x / 16. - 1., y / 16. - 1., 1. / 16., &palette);
+                    [r, g, b].map(|c| c as f32 * a as f32 / 255.)
+                })
+                .collect::<Vec<f32>>()
+        };
+        for style in AvatarStyle::ALL {
+            let working: Vec<_> = (0..32)
+                .map(|k| draw(style, AvatarPose::Working, k as f32 * 0.25))
+                .collect();
+            let nearest = [0.7, 2.3, 4.1]
+                .map(|t| {
+                    let thinking = draw(style, AvatarPose::Thinking, t);
+                    working
+                        .iter()
+                        .map(|w| {
+                            let (d, n) = thinking.iter().zip(w).fold((0., 0.), |(d, n), (a, b)| {
+                                (d + (a - b).abs(), n + a.max(*b))
+                            });
+                            d / f32::max(n, 1.)
+                        })
+                        .fold(f32::INFINITY, f32::min)
+                })
+                .into_iter()
+                .fold(f32::INFINITY, f32::min);
+            assert!(
+                nearest > 0.1,
+                "{style:?}: thinking looks like working ({nearest:.3})"
+            );
+        }
+    }
     #[test]
     fn old_ids_and_watch_mapping_are_stable() {
         assert_eq!(AvatarStyle::from_id("halo"), Some(AvatarStyle::Halo));
         assert_eq!(AvatarStyle::Rover.watch_code(), "Q");
         assert_eq!(AvatarStyle::from_id("future"), None);
+        assert_eq!(AvatarStyle::from_id("eye"), None);
+        assert_eq!(AvatarStyle::resolve("eye"), AvatarStyle::WatchEye);
     }
 }

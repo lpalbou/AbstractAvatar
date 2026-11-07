@@ -5,7 +5,7 @@ import math
 from pathlib import Path
 import unittest
 
-from abstractavatar import Renderer, catalog, validate_descriptor
+from abstractavatar import Renderer, catalog, resolve_style, retired, validate_descriptor
 
 
 class DescriptorTests(unittest.TestCase):
@@ -24,13 +24,34 @@ class DescriptorTests(unittest.TestCase):
 
 
 class NativeTests(unittest.TestCase):
-    def test_catalog_has_every_source_identity_and_stable_first_six(self):
+    def test_catalog_has_the_active_designs_and_catalog_json_agrees(self):
         designs = catalog()
-        self.assertEqual([d["id"] for d in designs[:6]], ["halo", "hover", "vortex", "eclipse", "eye", "rover"])
-        self.assertEqual(len(designs), 44)
-        self.assertEqual(len({d["id"] for d in designs}), 44)
-        self.assertEqual(sum(d["id"].startswith("watch-") and not d["id"].startswith("watch-shape-") for d in designs), 34)
-        self.assertTrue({"watch-shape-kitty", "watch-shape-face", "watch-shape-wave", "iphone-weave"} <= {d["id"] for d in designs})
+        self.assertEqual([d["id"] for d in designs[:5]], ["halo", "hover", "vortex", "eclipse", "rover"])
+        self.assertEqual(len(designs), 27)
+        self.assertEqual(len({d["id"] for d in designs}), 27)
+        self.assertEqual(sum(d["id"].startswith("watch-") for d in designs), 21)
+        self.assertIn("iphone-weave", {d["id"] for d in designs})
+        shipped = json.loads((Path(__file__).resolve().parents[1] / "catalog.json").read_text())
+        self.assertEqual([(d["code"], d["id"]) for d in designs], [(d["code"], d["id"]) for d in shipped["designs"]])
+        self.assertEqual({r["id"]: r["replacement"] for r in retired()}, {r["id"]: r["replacement"] for r in shipped["retired"]})
+
+    def test_retired_ids_are_not_active_and_still_render_their_fallback(self):
+        active = {d["id"] for d in catalog()}
+        gone = retired()
+        self.assertEqual(len(gone), 17)
+        self.assertFalse({r["id"] for r in gone} & active)
+        self.assertTrue({"eye", "watch-face", "watch-lens", "watch-shape-kitty"} <= {r["id"] for r in gone})
+        with Renderer(48, 48) as renderer:
+            for record in gone:
+                expected = record["replacement"] or "halo"
+                self.assertIn(expected, active)
+                self.assertEqual(resolve_style(record["id"]), expected)
+                self.assertEqual(renderer.render(record["id"], "speaking", .6, 1.1), renderer.render(expected, "speaking", .6, 1.1), record["id"])
+            self.assertEqual(resolve_style("future"), "halo")
+            frame = renderer.render("future", "ready", .6, 1.1)
+            self.assertEqual(frame, renderer.render("halo", "ready", .6, 1.1))
+            self.assertGreater(sum(frame[3::4]), 1000)
+            self.assertEqual(renderer.render_descriptor({"schema_version": 1, "style": "watch-dome", "state": "ready", "time": 1.1, "level": .6}), renderer.render("watch-hover", "ready", .6, 1.1))
 
     def test_gaze_moves_only_eyes_designs_and_catalog_json_agrees(self):
         designs = catalog()
@@ -84,7 +105,7 @@ class NativeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 renderer.set_palette(warm=(0, 999, 0))
             with self.assertRaises(ValueError):
-                renderer.render(style="absent")
+                renderer.render(style=7)
             with self.assertRaises(ValueError):
                 renderer.render(transparent="false")
             base = renderer.render("watch-rings", "speaking", .6, 1, bands=[0] * 8)
@@ -92,7 +113,7 @@ class NativeTests(unittest.TestCase):
             self.assertNotEqual(base, changed)
 
     def test_source_defined_voice_effects_follow_real_audio_only(self):
-        affected = ["watch-lotus", "watch-black-hole", "watch-accretion", "watch-cruiser"]
+        affected = ["watch-lotus", "watch-black-hole", "watch-accretion"]
         with Renderer(64, 64) as renderer:
             for style in affected:
                 for state in ["speaking", "listening"]:
@@ -108,9 +129,17 @@ class NativeTests(unittest.TestCase):
 
     def test_ported_activity_has_distinct_work_thought_wait_and_error_cues(self):
         with Renderer(64,64) as renderer:
-            for design in catalog()[6:]:
+            for design in catalog()[5:]:
                 frames=[renderer.render(design["id"],state,.6,2.3) for state in ["ready","thinking","working","waiting","error"]]
                 self.assertEqual(len(set(frames)),5,design["id"])
+
+    def test_watch_rings_follow_each_band(self):
+        with Renderer(64, 64) as renderer:
+            low = renderer.render("watch-rings", "speaking", .6, 2, bands=[1, 1, 0, 0, 0, 0, 0, 0])
+            high = renderer.render("watch-rings", "speaking", .6, 2, bands=[0, 0, 0, 0, 0, 0, 1, 1])
+            self.assertNotEqual(low, high)
+            # Without bands the rings derive their own spread from the level and time.
+            self.assertNotEqual(renderer.render("watch-rings", "speaking", .6, 2), renderer.render("watch-rings", "speaking", .6, 2, bands=[.6] * 8))
 
 
 if __name__ == "__main__":

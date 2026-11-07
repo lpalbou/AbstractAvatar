@@ -49,6 +49,37 @@ pub extern "C" fn avatar_style_field_len(style: u32, field: u32) -> usize {
         .and_then(|s| s.field(field))
         .map_or(0, |s| s.len())
 }
+/// The catalog code of the design that unknown ids, and retired ids without a replacement,
+/// resolve to.
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_default_style() -> u32 {
+    AvatarStyle::DEFAULT.code()
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_retired_count() -> u32 {
+    RETIRED.len() as u32
+}
+/// Retired field 0 = id, 1 = replacement id ("" when it resolves to the default),
+/// 2 = version that retired it, 3 = decision date, 4 = reason.
+fn retired_field(index: u32, field: u32) -> Option<&'static str> {
+    let r = RETIRED.get(index as usize)?;
+    match field {
+        0 => Some(r.id),
+        1 => Some(r.replacement.map_or("", |s| s.id())),
+        2 => Some(r.retired_in),
+        3 => Some(r.date),
+        4 => Some(r.reason),
+        _ => None,
+    }
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_retired_field_ptr(index: u32, field: u32) -> *const u8 {
+    retired_field(index, field).map_or(std::ptr::null(), |s| s.as_ptr())
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_retired_field_len(index: u32, field: u32) -> usize {
+    retired_field(index, field).map_or(0, |s| s.len())
+}
 #[unsafe(no_mangle)]
 pub extern "C" fn avatar_create(width: u32, height: u32) -> u32 {
     if width == 0 || height == 0 || width > LIMIT || height > LIMIT {
@@ -167,14 +198,7 @@ fn draw(
     }
     let radius = f.width.min(f.height) as f32 * 0.5;
     let ground = f.ground.to_be_bytes();
-    let frame = super::Frame::with_bands(
-        style,
-        pose,
-        level,
-        time,
-        f.gaze,
-        f.bands.unwrap_or([level; 8]),
-    );
+    let frame = super::Frame::build(style, pose, level, time, f.gaze, f.bands);
     for y in 0..f.height {
         for x in 0..f.width {
             let ink = frame.rgba(
@@ -376,6 +400,13 @@ mod tests {
         assert_eq!(avatar_destroy(h), 0);
         assert_eq!(avatar_destroy(h), -1);
         assert_eq!(avatar_pixels_len(h), 0);
+        assert_eq!(avatar_default_style(), 0);
+        assert_eq!(avatar_retired_count(), 17);
+        assert_eq!(avatar_retired_field_len(0, 1), "watch-eye".len());
+        assert_eq!(avatar_retired_field_len(1, 1), 0);
+        assert!(
+            avatar_retired_field_ptr(17, 0).is_null() && avatar_retired_field_ptr(0, 5).is_null()
+        );
         assert!(avatar_pixels(h).is_null());
         // SAFETY: owned remains a valid allocation; the destroyed handle is rejected.
         assert_eq!(

@@ -1,4 +1,7 @@
-//! Stable procedural design catalog. Numeric ABI codes are append-only; persist string ids.
+//! Procedural design catalog. Persist string ids: a numeric ABI code is only a position in
+//! this build's catalog and changes when a design is retired. A retired or unknown id
+//! resolves to a documented design through [`AvatarStyle::resolve`], so a stored identity
+//! always renders.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AvatarStyle {
@@ -7,7 +10,6 @@ pub enum AvatarStyle {
     Hover,
     Vortex,
     Eclipse,
-    Eye,
     Rover,
     WatchHalo,
     WatchVortex,
@@ -19,42 +21,25 @@ pub enum AvatarStyle {
     WatchCrystal,
     WatchEclipse,
     WatchSynapse,
-    WatchDrop,
     WatchWave,
     WatchWell,
     WatchBlackHole,
     WatchAccretion,
-    WatchFace,
-    WatchImprint,
-    WatchContour,
-    WatchMembrane,
     WatchAurora,
     WatchMurmuration,
     WatchEye,
-    WatchLens,
-    WatchDome,
-    WatchValet,
-    WatchRetro,
-    WatchDeco,
     WatchRover,
     WatchHover,
     WatchSpark,
-    WatchCruiser,
-    WatchAndroid,
-    WatchSentinel,
     WatchOcean,
-    WatchKitty,
-    WatchFaceShape,
-    WatchWaveShape,
     IphoneWeave,
 }
 impl AvatarStyle {
-    pub const ALL: [Self; 44] = [
+    pub const ALL: [Self; 27] = [
         Self::Halo,
         Self::Hover,
         Self::Vortex,
         Self::Eclipse,
-        Self::Eye,
         Self::Rover,
         Self::WatchHalo,
         Self::WatchVortex,
@@ -66,33 +51,17 @@ impl AvatarStyle {
         Self::WatchCrystal,
         Self::WatchEclipse,
         Self::WatchSynapse,
-        Self::WatchDrop,
         Self::WatchWave,
         Self::WatchWell,
         Self::WatchBlackHole,
         Self::WatchAccretion,
-        Self::WatchFace,
-        Self::WatchImprint,
-        Self::WatchContour,
-        Self::WatchMembrane,
         Self::WatchAurora,
         Self::WatchMurmuration,
         Self::WatchEye,
-        Self::WatchLens,
-        Self::WatchDome,
-        Self::WatchValet,
-        Self::WatchRetro,
-        Self::WatchDeco,
         Self::WatchRover,
         Self::WatchHover,
         Self::WatchSpark,
-        Self::WatchCruiser,
-        Self::WatchAndroid,
-        Self::WatchSentinel,
         Self::WatchOcean,
-        Self::WatchKitty,
-        Self::WatchFaceShape,
-        Self::WatchWaveShape,
         Self::IphoneWeave,
     ];
     pub fn from_code(code: u32) -> Option<Self> {
@@ -101,8 +70,32 @@ impl AvatarStyle {
     pub fn code(self) -> u32 {
         Self::ALL.iter().position(|v| *v == self).unwrap() as u32
     }
+    /// The design an unknown id resolves to, and the replacement for retired designs that
+    /// name none: the shaded [`Self::Halo`] orb.
+    pub const DEFAULT: Self = Self::Halo;
+    /// Look up an active design. Retired and unknown ids return `None`; use [`Self::resolve`]
+    /// to render a stored identity.
     pub fn from_id(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|s| s.id() == id)
+    }
+    /// The design to draw for a stored id, never failing: an active id is itself, a retired
+    /// id is its replacement (or [`Self::DEFAULT`] when it names none), and any other id is
+    /// [`Self::DEFAULT`].
+    pub fn resolve(id: &str) -> Self {
+        Self::from_id(id)
+            .or_else(|| Self::retired(id).and_then(|r| r.replacement))
+            .unwrap_or(Self::DEFAULT)
+    }
+    /// The retirement record for an id that is no longer in the active catalog.
+    pub fn retired(id: &str) -> Option<&'static RetiredStyle> {
+        RETIRED.iter().find(|r| r.id == id)
+    }
+    /// The six shaded designs sampled analytically; every other design is a stroke scene.
+    pub(crate) fn analytic(self) -> bool {
+        matches!(
+            self,
+            Self::Halo | Self::Hover | Self::Vortex | Self::Eclipse | Self::Rover
+        )
     }
     pub fn id(self) -> &'static str {
         self.fields()[0]
@@ -134,19 +127,11 @@ impl AvatarStyle {
         matches!(
             self,
             Self::Hover
-                | Self::Eye
                 | Self::Rover
-                | Self::WatchFace
                 | Self::WatchEye
-                | Self::WatchLens
-                | Self::WatchDome
-                | Self::WatchValet
-                | Self::WatchRetro
-                | Self::WatchDeco
                 | Self::WatchRover
                 | Self::WatchHover
                 | Self::WatchSpark
-                | Self::WatchAndroid
         )
     }
     /// Catalog field by ABI index: 0..4 as in [`Self::fields`], then 5 = [`Self::gaze`].
@@ -163,7 +148,6 @@ impl AvatarStyle {
         Self::Hover => ["hover", "Hover robot", "Warm eyes and floating thrusters", "HV", "machines"],
         Self::Vortex => ["vortex", "Vortex", "Spiral arms gather to listen and reach out to speak", "B", "orbs"],
         Self::Eclipse => ["eclipse", "Eclipse", "A dark disc, golden corona and working rays", "U", "forms"],
-        Self::Eye => ["eye", "Eye", "A watchful eye that opens to listen and scans to work", "K", "faces"],
         Self::Rover => ["rover", "Rover", "A curious tracked robot with attentive binocular eyes", "Q", "machines"],
         Self::WatchHalo => ["watch-halo", "Watch Halo", "rays of light around it, as long as your voice is loud", "A", "orbs"],
         Self::WatchVortex => ["watch-vortex", "Watch Vortex", "the points swirl out into arms that reach with the voice", "B", "orbs"],
@@ -175,34 +159,129 @@ impl AvatarStyle {
         Self::WatchCrystal => ["watch-crystal", "Watch Crystal", "a crystal that grows to think, gathers orbits to work, spreads wings to speak", "S", "forms"],
         Self::WatchEclipse => ["watch-eclipse", "Watch Eclipse", "a golden eclipse: a corona to listen, orbits to think, a shutter to work, bars to speak", "U", "forms"],
         Self::WatchSynapse => ["watch-synapse", "Watch Synapse", "a network of nodes: tangled to think, orbiting to work, a starburst to speak", "V", "forms"],
-        Self::WatchDrop => ["watch-drop", "Watch Drop", "a drop of light: a vortex to think, fibres to work, a horn of particles to speak", "W", "forms"],
         Self::WatchWave => ["watch-wave", "Watch Wave", "ribbons of light, each a harmonic of the voice; they wind into a swirl to work", "X", "forms"],
         Self::WatchWell => ["watch-well", "Watch Well", "space bending into a well: ripples carry the voice, two masses circle it as it works", "T", "cosmos"],
         Self::WatchBlackHole => ["watch-black-hole", "Watch Black hole", "a ring of light round a shadow: gas falls in to listen, a disk to think, jets to work", "Y", "cosmos"],
         Self::WatchAccretion => ["watch-accretion", "Watch Accretion", "a young star's disk of dust: it gathers into clumps to think and merges into planets to work", "Z", "cosmos"],
-        Self::WatchFace => ["watch-face", "Watch Face", "a friendly face whose lips follow its voice; it cups its ear to listen", "G", "faces"],
-        Self::WatchImprint => ["watch-imprint", "Watch Imprint", "a face seen only where it touches a pane of glass; it presses in as it speaks", "I", "faces"],
-        Self::WatchContour => ["watch-contour", "Watch Contour", "a face raised in lines of light: its lips speak, the words leave them as waves along the lines", "CT", "faces"],
-        Self::WatchMembrane => ["watch-membrane", "Watch Membrane", "a face pressing through a fabric of light: it presses closer with the voice and speaks through it", "MB", "faces"],
         Self::WatchAurora => ["watch-aurora", "Watch Aurora", "the northern lights over a lake: they rise with the voice and gather into a corona to think", "AU", "nature"],
         Self::WatchMurmuration => ["watch-murmuration", "Watch Murmuration", "a flock of starlings at dusk: it swells to listen, spins to think, streams to work, draws the voice", "MU", "nature"],
         Self::WatchEye => ["watch-eye", "Watch Eye", "one friendly eye: its iris glows with its voice, it opens wide to listen", "K", "faces"],
-        Self::WatchLens => ["watch-lens", "Watch Lens", "a glowing red camera eye; its core flares as it speaks", "L", "machines"],
-        Self::WatchDome => ["watch-dome", "Watch Dome", "a dome-headed droid: it turns to face you, chatters with its lights, spins to think", "M", "machines"],
-        Self::WatchValet => ["watch-valet", "Watch Valet", "a fussy gilded valet, stiff and proper: it frets as it thinks and talks with its hands", "N", "machines"],
-        Self::WatchRetro => ["watch-retro", "Watch Retro", "a gentle giant of the fifties, slow and deliberate: the works in its dome whirr as it thinks, neon tubes flicker as it talks", "O", "machines"],
-        Self::WatchDeco => ["watch-deco", "Watch Deco", "a serene art-deco machine woman, regal and unhurried, rings of light passing around her", "P", "machines"],
         Self::WatchRover => ["watch-rover", "Watch Rover", "a shy, curious little rover on tracks: its eyes lean in to listen, tilt when puzzled, bob when it talks", "Q", "machines"],
         Self::WatchHover => ["watch-hover", "Watch Hover", "a round floating robot, polite and brave: its red eyes glow with its voice, it drifts closer to listen", "HV", "machines"],
         Self::WatchSpark => ["watch-spark", "Watch Spark", "a curious robot on tracks with shutter eyes: it leans in for input and its eyes flick while it thinks", "SP", "machines"],
-        Self::WatchCruiser => ["watch-cruiser", "Watch Cruiser", "a sleek black car: its red scanner sweeps while it thinks, its dash lights up with its voice", "CR", "machines"],
-        Self::WatchAndroid => ["watch-android", "Watch Android", "a pale gold android with amber eyes: a tilt of the head while it thinks, a precise blink", "AN", "machines"],
-        Self::WatchSentinel => ["watch-sentinel", "Watch Sentinel", "a chrome sentinel helmet whose red eye sweeps side to side, faster as it thinks; it speaks in a low glow", "CY", "machines"],
         Self::WatchOcean => ["watch-ocean", "Watch Ocean", "a sea at dusk whose swell rises with its voice; while it thinks the waves fall into order", "H", "nature"],
-        Self::WatchKitty => ["watch-shape-kitty", "Kitty silhouette", "A point-cloud cat with two ears, responding to activity and voice", "shape:kitty", "faces"],
-        Self::WatchFaceShape => ["watch-shape-face", "Face silhouette", "The original point-cloud smiling face silhouette", "shape:face", "faces"],
-        Self::WatchWaveShape => ["watch-shape-wave", "Wave silhouette", "The original planar point-cloud wave silhouette", "shape:wave", "forms"],
         Self::IphoneWeave => ["iphone-weave", "Woven orb", "Five cords become a geodesic sphere or a raised approval hand", "", "forms"],
     }
+    }
+}
+
+/// A design removed from the active catalog. Its id stays reserved and resolves to
+/// `replacement`, or to [`AvatarStyle::DEFAULT`] when that is `None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RetiredStyle {
+    pub id: &'static str,
+    /// The version whose catalog first omits the design.
+    pub retired_in: &'static str,
+    /// The date the removal was decided (YYYY-MM-DD).
+    pub date: &'static str,
+    pub reason: &'static str,
+    pub replacement: Option<AvatarStyle>,
+}
+const REMOVED: &str = "removed from the catalog";
+const REDESIGN: &str =
+    "removed until it is redesigned faithfully from its Apple Watch original; a redesign returns under the same id";
+const fn retired(
+    id: &'static str,
+    reason: &'static str,
+    replacement: Option<AvatarStyle>,
+) -> RetiredStyle {
+    RetiredStyle {
+        id,
+        retired_in: "0.2.0",
+        date: "2026-11-07",
+        reason,
+        replacement,
+    }
+}
+/// Every retired id, in former catalog order. `catalog.json` carries the same list.
+pub const RETIRED: [RetiredStyle; 17] = [
+    retired("eye", REMOVED, Some(AvatarStyle::WatchEye)),
+    retired("watch-drop", REMOVED, None),
+    retired("watch-face", REDESIGN, None),
+    retired("watch-imprint", REDESIGN, None),
+    retired("watch-contour", REDESIGN, None),
+    retired("watch-membrane", REDESIGN, None),
+    retired("watch-lens", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-dome", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-valet", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-retro", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-deco", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-cruiser", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-android", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-sentinel", REDESIGN, Some(AvatarStyle::WatchHover)),
+    retired("watch-shape-kitty", REMOVED, None),
+    retired("watch-shape-face", REMOVED, None),
+    retired("watch-shape-wave", REMOVED, Some(AvatarStyle::WatchWave)),
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn retired_ids_are_not_active_and_resolve_to_a_drawable_design() {
+        for r in RETIRED {
+            assert_eq!(AvatarStyle::from_id(r.id), None, "{} is still active", r.id);
+            let resolved = AvatarStyle::resolve(r.id);
+            assert_eq!(resolved, r.replacement.unwrap_or(AvatarStyle::DEFAULT));
+            assert!(AvatarStyle::ALL.contains(&resolved));
+            assert!(!r.reason.is_empty() && r.date.len() == 10 && r.retired_in == "0.2.0");
+        }
+        let mut ids: Vec<_> = RETIRED.iter().map(|r| r.id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), RETIRED.len());
+        assert_eq!(AvatarStyle::ALL.len() + RETIRED.len(), 44);
+    }
+    #[cfg(feature = "json")]
+    #[test]
+    fn catalog_json_matches_the_compiled_catalog_and_retired_list() {
+        let shipped: serde_json::Value =
+            serde_json::from_str(include_str!("../catalog.json")).unwrap();
+        assert_eq!(shipped["default"], AvatarStyle::DEFAULT.id());
+        let designs = shipped["designs"].as_array().unwrap();
+        assert_eq!(designs.len(), AvatarStyle::ALL.len());
+        for (row, style) in designs.iter().zip(AvatarStyle::ALL) {
+            assert_eq!(row["code"], style.code());
+            assert_eq!(row["id"], style.id());
+            assert_eq!(row["name"], style.label());
+            assert_eq!(row["gaze"], style.gaze());
+        }
+        let retired = shipped["retired"].as_array().unwrap();
+        assert_eq!(retired.len(), RETIRED.len());
+        for (row, r) in retired.iter().zip(RETIRED) {
+            assert_eq!(row["id"], r.id);
+            assert_eq!(
+                row["replacement"],
+                serde_json::json!(r.replacement.map(|s| s.id()))
+            );
+            assert_eq!(row["retired_in"], r.retired_in);
+            assert_eq!(row["date"], r.date);
+            assert_eq!(row["reason"], r.reason);
+            assert!(
+                designs.iter().all(|d| d["id"] != row["id"]),
+                "{} is active",
+                r.id
+            );
+        }
+    }
+    #[test]
+    fn unknown_ids_fall_back_to_the_documented_default() {
+        assert_eq!(AvatarStyle::DEFAULT, AvatarStyle::default());
+        for id in ["", "future", "WATCH-HALO", "watch-face ", "\u{0}"] {
+            assert_eq!(AvatarStyle::resolve(id), AvatarStyle::Halo, "{id:?}");
+        }
+        for style in AvatarStyle::ALL {
+            assert_eq!(AvatarStyle::resolve(style.id()), style);
+        }
     }
 }
