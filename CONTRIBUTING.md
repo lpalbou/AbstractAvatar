@@ -16,7 +16,8 @@ Follow the [design guide](docs/catalog.md#design-guide): thinking and working mu
 animations, and `cargo test` checks it.
 
 Preserve existing style keys and the published ABI contract. Add rather than repurpose catalog
-entries. To remove a design, add it to `RETIRED` in `src/catalog.rs` and to `retired` in
+entries. A new design starts `experimental`; it becomes `ready` (in `AvatarStyle::status` and
+`catalog.json`) only when the maintainer approves it. To remove a design, add it to `RETIRED` in `src/catalog.rs` and to `retired` in
 `catalog.json` with a reason and a replacement where one fits; never reuse a retired key for a
 different design. Changes to ownership or frame semantics belong in [architecture decisions](docs/adr/0001-portable-procedural-generation.md).
 

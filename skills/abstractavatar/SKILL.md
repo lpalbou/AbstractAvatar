@@ -34,7 +34,10 @@ WebAssembly exports, and `json` adds the versioned descriptor.
 
 - Style keys identify designs; store keys, not display names or numeric catalog codes (codes
   shift when a design is retired). A retired or unknown key still renders: its replacement, or
-  `halo`. `retired()` lists retired keys; `resolve_style(key)` names what will draw.
+  `watch-halo`. `retired()` lists retired keys; `resolve_style(key)` names what will draw.
+- Offer users only ready designs: `ready()` (Python), `AvatarStyle::ready()` (Rust),
+  `avatar_ready_*` (C/Wasm). Experimental designs (`status` `experimental`) render when a key
+  names them but never appear in a picker or as a default.
 - States are `ready`, `thinking`, `working`, `listening`, `speaking`, `waiting`, `error`.
 - Inputs are explicit. Time is finite elapsed seconds, level is 0..1, gaze is two values in -1..1.
 - Gaze moves eyes only: catalog `gaze` is `eyes` (pupils/irises/eye lamps shift a few percent while
@@ -48,7 +51,7 @@ WebAssembly exports, and `json` adds the versioned descriptor.
 ## Preview a design
 
 ```sh
-python -m abstractavatar render --style halo --state speaking --level 0.6 --time 1.2 --size 128 --output avatar.png
+python -m abstractavatar render --style watch-halo --state speaking --level 0.6 --time 1.2 --size 128 --output avatar.png
 ```
 
 This writes a PNG at the requested path. Enumerate the catalog before choosing another style.
@@ -60,7 +63,7 @@ Use distinct filenames when keeping several previews.
 from abstractavatar import Renderer
 
 with Renderer(width=128, height=128) as renderer:
-    rgba = renderer.render(style="halo", state="speaking", level=0.6, time=1.2)
+    rgba = renderer.render(style="watch-halo", state="speaking", level=0.6, time=1.2)
     assert len(rgba) == 128 * 128 * 4
 ```
 
@@ -81,7 +84,7 @@ once. Host palette colors remain authoritative even for Apple-derived designs.
 
 ```python
 descriptor = {
-    "schema_version": 1, "style": "halo", "state": "speaking",
+    "schema_version": 1, "style": "watch-halo", "state": "speaking",
     "time": 1.2, "level": 0.6, "gaze": [0.0, 0.0]
 }
 ```

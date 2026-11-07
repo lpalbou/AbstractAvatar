@@ -1,8 +1,10 @@
 # Catalog and activity
 
 `catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
-stable style key, display name, description, family, source reference and gaze component. `catalog.json` records
-the design provenance, the default design and the retired designs.
+stable style key, display name, description, family, source reference, gaze component and status
+(`ready` or `experimental`, see [ready and experimental designs](#ready-and-experimental-designs)).
+`catalog.json` records the design provenance, the default design and the retired designs; its
+[JSON Schema](../schema/catalog.schema.json) describes every field.
 
 The catalog preserves shaded terminal characters separately from particle designs whose names
 overlap. For example, a shaded Halo and the Watch Halo remain separate choices. The `halo`,
@@ -59,36 +61,50 @@ assuming a fixed number or ordering. See [API](api.md) and [frame contract](fram
 ## Retired designs
 
 A retired key leaves the catalog but stays reserved, and it always renders: a stored identity
-that names it draws its replacement, or the default design `halo` when it has none. Any other
-unknown key also draws `halo`. `AvatarStyle::resolve` (Rust), `resolve_style` (Python) and the
+that names it draws its replacement, or the default design `watch-halo` when it has none. Any
+other unknown key also draws `watch-halo`. Every replacement is a ready design. `AvatarStyle::resolve` (Rust), `resolve_style` (Python) and the
 `avatar_retired_*` exports (C/WebAssembly) apply this rule; `catalog.json` lists the same records
 under `retired`.
 
 | Retired key | Draws | Status |
 |---|---|---|
-| `eye` | `watch-eye` | Removed in 0.2.0 |
-| `watch-drop` | `halo` | Removed in 0.2.0 |
-| `watch-shape-kitty`, `watch-shape-face` | `halo` | Removed in 0.2.0 |
+| `eye` | `watch-well` | Removed in 0.2.0 |
+| `watch-drop` | `watch-halo` | Removed in 0.2.0 |
+| `watch-shape-kitty`, `watch-shape-face` | `watch-halo` | Removed in 0.2.0 |
 | `watch-shape-wave` | `watch-wave` | Removed in 0.2.0 |
-| `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane` | `halo` | Awaiting a redesign |
+| `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane` | `watch-halo` | Awaiting a redesign |
 | `watch-lens`, `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`, `watch-sentinel` | `watch-hover` | Awaiting a redesign |
 
 A design awaiting a redesign returns under its original key, so stored identities pick it up.
 
 ## Design guide
 
-`halo`, `watch-wave`, `watch-well`, `watch-hover` and `iphone-weave` set the style for every
-design:
+### Ready and experimental designs
+
+A **ready** design meets this guide in every state and is approved for users. Ready designs are
+the only ones a host offers: in a picker, in a list, or as a default. Seven designs are ready:
+`watch-halo`, `watch-rings`, `watch-wave`, `watch-well`, `watch-murmuration`, `watch-hover` and
+`iphone-weave`. The default design (`watch-halo`) and every retired-key replacement are ready.
+
+The other 20 designs are **experimental**: not ready for users. They stay in the catalog and
+render whenever a stored identity or a host asks for them by key, so nothing refuses or redraws
+them, but pickers and defaults do not surface them. List what to offer with `ready()` (Python),
+`AvatarStyle::ready()` (Rust) or `avatar_ready_count`/`avatar_ready_style` (C/WebAssembly); each
+catalog record also carries its `status`. An experimental design becomes ready when it is
+approved, under the same key.
+
+### Principles
+
+`watch-wave`, `watch-well`, `watch-hover` and `iphone-weave` set the style for every design:
 
 - **One clear idea per state.** `watch-wave` is calm ribbons at rest, harmonics while voiced and
   a swirl while working; `iphone-weave` is loose cords that become a globe to listen and a raised
   hand to wait. Each state reads at a glance, even in a still frame.
 - **Thinking inward, working outward.** `watch-well` draws its two masses close and circles them
-  slowly to think, and swings them wider and faster to work; `halo` turns its crown and sweeps
-  its highlight to think, and spins its orbit faster to work. Contemplation contracts and slows;
+  slowly to think, and swings them wider and faster to work. Contemplation contracts and slows;
   activity spreads and speeds up.
 - **Listening takes in, speaking gives out.** Intake travels toward the centre and speech travels
-  away from it (`halo`'s streamers, `watch-wave`'s incoming and outgoing wavefronts).
+  away from it (`watch-wave`'s incoming and outgoing wavefronts).
 - **The voice moves a part, not the whole.** Ribbons, rings or eyes answer the level and bands;
   the body stays recognisable.
 - **Recognisable characters.** `watch-hover` is a believable object: an opaque shell, a visor,

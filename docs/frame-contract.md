@@ -7,7 +7,7 @@ A versioned JSON object describes a frame request:
 ```json
 {
   "schema_version": 1,
-  "style": "halo",
+  "style": "watch-halo",
   "state": "speaking",
   "time": 1.2,
   "level": 0.6,
@@ -22,7 +22,8 @@ motion from the level and time.
 The descriptor names trusted built-in generation. It contains no code, shader source, file path,
 URL or library name. Unsupported versions, states and fields are explicit errors. `style` is any
 id of 1 to 64 bytes: an active id draws that design, a retired id draws its replacement, and any
-other id draws the default design `halo` (see [retired designs](catalog.md#retired-designs)).
+other id draws the default design `watch-halo` (see [retired designs](catalog.md#retired-designs)).
+An experimental id draws that design too: status only decides what a host offers.
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates

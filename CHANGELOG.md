@@ -2,8 +2,8 @@
 
 ## [0.2.0] - unreleased, date to set at release
 
-This release changes the catalog: 17 designs leave it. Stored ids keep rendering (see
-Migration).
+This release changes the catalog: 17 designs leave it, and only seven of the 27 that remain are
+ready to offer users. Stored ids keep rendering (see Migration).
 
 ### Removed
 
@@ -20,16 +20,31 @@ Migration).
 ### Added
 
 - Retired ids resolve instead of failing. `AvatarStyle::resolve(id)` returns the active design,
-  a retired id's replacement, or `AvatarStyle::DEFAULT` (`halo`) for a retired id without one
-  and for any unknown id. `AvatarStyle::retired(id)` and `RETIRED` describe each retired id
+  a retired id's replacement, or `AvatarStyle::DEFAULT` (`watch-halo`) for a retired id without
+  one and for any unknown id. `AvatarStyle::retired(id)` and `RETIRED` describe each retired id
   (version, decision date, reason, replacement).
 - `catalog.json` gains `default` and a `retired` list with the same records.
 - C/WebAssembly exports `avatar_default_style`, `avatar_retired_count`,
   `avatar_retired_field_ptr` and `avatar_retired_field_len` (ABI 1, additive).
 - Python `retired()` and `resolve_style(id)`. `Renderer.render` and `render_descriptor` draw a
   retired or unknown id as its resolved design.
+- Design status. Each active design is `ready` or `experimental`. Seven are ready: `watch-halo`,
+  `watch-rings`, `watch-wave`, `watch-well`, `watch-murmuration`, `watch-hover` and
+  `iphone-weave`; the other 20 are experimental, not ready for users. Hosts offer only ready
+  designs in pickers, lists and defaults; an experimental design still renders when a key names
+  it. Rust: `AvatarStyle::status()`, `is_ready()`, `AvatarStyle::ready()` and
+  `AvatarStyle::all()`, and `DesignStatus`. C/WebAssembly (ABI 1.1, additive): catalog field 6
+  (`ready` or `experimental`), `avatar_ready_count`, `avatar_ready_style` and
+  `avatar_abi_minor`. Python: a `status` key in `catalog()` records and `ready()`.
+  `catalog.json`: `schema_minor` 1 and a `status` per design, described by
+  `schema/catalog.schema.json`.
 
 ### Changed
+
+- The default design is `watch-halo` (was `halo`): an unknown id, a retired id without a
+  replacement, Python `Renderer.render()` without a style and the CLI `render` command draw it.
+  `AvatarStyle::default()` is `WatchHalo`. The retired `eye` now draws `watch-well` (was
+  `watch-eye`, which is experimental), so every fallback is a ready design.
 
 - `watch-rings` moves each of its six rings with its own part of the voice. With measured
   `bands`, ring 1 follows the lowest bands and ring 6 the highest; each ring tilts, swells and
@@ -54,10 +69,14 @@ Migration).
 ### Migration
 
 - Persist ids, never catalog codes. Look codes up from the installed catalog.
-- A stored retired id renders its replacement: `eye` draws `watch-eye`; `watch-lens`,
+- A stored retired id renders its replacement: `eye` draws `watch-well`; `watch-lens`,
   `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`
   and `watch-sentinel` draw `watch-hover`; `watch-shape-wave` draws `watch-wave`. The others
-  draw `halo`. To offer a new choice, compare the stored id with the retired list.
+  draw `watch-halo`. To offer a new choice, compare the stored id with the retired list.
+- Build pickers from the ready list (`ready()`, `AvatarStyle::ready()`, `avatar_ready_*`), not
+  from the whole catalog. A stored experimental id keeps rendering; show it as the current
+  choice without listing it among the options. A host that needs a default uses
+  `watch-halo`.
 - Hosts that resolve a style from the catalog themselves should apply the retired list
   (`avatar_retired_*` or `catalog.json`) before treating an id as unknown.
 

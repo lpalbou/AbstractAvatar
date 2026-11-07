@@ -7,7 +7,7 @@
   "required": ["schema_version", "style", "state", "time", "level"],
   "properties": {
     "schema_version": {"type": "integer", "const": 1},
-    "style": {"type": "string", "minLength": 1, "maxLength": 64, "description": "A design id (at most 64 UTF-8 bytes). An active id draws that design, a retired id its replacement, any other id the default design"},
+    "style": {"type": "string", "minLength": 1, "maxLength": 64, "description": "A design id (at most 64 UTF-8 bytes). An active id (ready or experimental) draws that design, a retired id its replacement, any other id the default design watch-halo"},
     "state": {"enum": ["ready", "thinking", "working", "listening", "speaking", "waiting", "error"]},
     "time": {"type": "number", "minimum": 0, "maximum": 86400},
     "level": {"type": "number", "minimum": 0, "maximum": 1},

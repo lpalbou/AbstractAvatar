@@ -13,10 +13,12 @@ Use it for an assistant portrait, an activity indicator or a procedural characte
 to your application's state. The host supplies state and presentation; AbstractAvatar generates
 the picture locally.
 
-![Procedural avatar catalog](docs/media/catalog.png)
+![The seven ready avatar designs, speaking](docs/media/catalog.png)
 
 **What's new in 0.2.0:** the catalog keeps 27 designs; 17 are retired, and a stored retired or
-unknown id still renders (its replacement, or `halo`). `watch-rings` moves each ring with its own
+unknown id still renders (its replacement, or `watch-halo`). Seven designs are ready and offered
+to users; the other 20 are experimental: they render when asked for by key but pickers do not
+list them. The picture above shows the ready designs. `watch-rings` moves each ring with its own
 voice band, and thinking and working are distinct animations in every design. See the
 [changelog](CHANGELOG.md#020---unreleased-date-to-set-at-release).
 
@@ -31,7 +33,7 @@ cargo add abstractavatar
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
-let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let frame = Frame::new(AvatarStyle::WatchHalo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
 let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
 let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
 ```
@@ -46,7 +48,7 @@ Install from PyPI with Python 3.10+:
 ```sh
 python -m pip install abstractavatar
 python -m abstractavatar catalog
-python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+python -m abstractavatar render --style watch-halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
 
 Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. On other platforms pip builds the
@@ -60,13 +62,14 @@ library from the source distribution, which needs Rust 1.87+. To build from a ch
 - **Python/native:** request RGBA pixels through the binding or the C interface and present them
   with your UI toolkit.
 
-Store catalog style identifiers, rather than numeric indices. Supply time explicitly, stop
+Store catalog style identifiers, rather than numeric indices. Offer users only the ready designs
+(`AvatarStyle::ready()`, Python `ready()`, `avatar_ready_*`). Supply time explicitly, stop
 animation while hidden, and use a static frame when reduced motion is enabled. Platform adapters
 do not need their own geometry implementations.
 
 The catalog includes shaded characters, particle orbs, forms, machines, cosmic and nature scenes
-and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, retired keys and the
-design guide.
+and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, ready and experimental
+designs, retired keys and the design guide.
 
 ## Documentation
 

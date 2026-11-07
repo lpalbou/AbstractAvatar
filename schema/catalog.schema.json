@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lpalbou/AbstractAvatar/schema/catalog.schema.json",
+  "title": "AbstractAvatar catalog (catalog.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "schema_minor", "default", "designs", "retired"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "schema_minor": {"type": "integer", "minimum": 1, "description": "1 adds the per-design status"},
+    "default": {"type": "string", "description": "The design an unknown id draws; always a ready design"},
+    "designs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "id", "name", "description", "reference", "family", "gaze", "status", "source", "kind"],
+        "properties": {
+          "code": {"type": "integer", "minimum": 0, "description": "Position in this build's catalog; persist id instead"},
+          "id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "reference": {"type": "string"},
+          "family": {"type": "string"},
+          "gaze": {"enum": ["eyes", "none"]},
+          "status": {"enum": ["ready", "experimental"], "description": "Offer only ready designs in pickers, lists and defaults; an experimental design still renders when its id is asked for"},
+          "source": {"type": "string"},
+          "kind": {"type": "string"}
+        }
+      }
+    },
+    "retired": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "former_code", "retired_in", "date", "reason", "replacement"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 64},
+          "name": {"type": "string"},
+          "former_code": {"type": "integer", "minimum": 0},
+          "retired_in": {"type": "string"},
+          "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+          "reason": {"type": "string"},
+          "replacement": {"type": ["string", "null"], "description": "A ready design id, or null for the default"}
+        }
+      }
+    }
+  }
+}

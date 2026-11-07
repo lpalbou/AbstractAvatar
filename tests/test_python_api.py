@@ -38,6 +38,13 @@ class NativeTests(unittest.TestCase):
         self.assertEqual({r["id"]: r["replacement"] for r in retired()}, {r["id"]: r["replacement"] for r in shipped["retired"]})
         self.assertEqual({d["id"]: d["status"] for d in designs}, {d["id"]: d["status"] for d in shipped["designs"]})
         self.assertEqual((shipped["schema_version"], shipped["schema_minor"], shipped["default"]), (1, 1, "watch-halo"))
+        schema = json.loads((Path(__file__).resolve().parents[1] / "schema" / "catalog.schema.json").read_text())
+        self.assertEqual(set(shipped), set(schema["required"]))
+        for key in ("designs", "retired"):
+            item = schema["properties"][key]["items"]
+            for row in shipped[key]:
+                self.assertEqual(set(row), set(item["required"]), row["id"])
+        self.assertEqual({d["status"] for d in shipped["designs"]}, set(schema["properties"]["designs"]["items"]["properties"]["status"]["enum"]))
 
     def test_only_the_seven_rated_designs_are_ready_and_every_fallback_is_ready(self):
         designs = catalog()

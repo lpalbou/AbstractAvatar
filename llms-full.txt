@@ -39,10 +39,12 @@ Use it for an assistant portrait, an activity indicator or a procedural characte
 to your application's state. The host supplies state and presentation; AbstractAvatar generates
 the picture locally.
 
-![Procedural avatar catalog](docs/media/catalog.png)
+![The seven ready avatar designs, speaking](docs/media/catalog.png)
 
 **What's new in 0.2.0:** the catalog keeps 27 designs; 17 are retired, and a stored retired or
-unknown id still renders (its replacement, or `halo`). `watch-rings` moves each ring with its own
+unknown id still renders (its replacement, or `watch-halo`). Seven designs are ready and offered
+to users; the other 20 are experimental: they render when asked for by key but pickers do not
+list them. The picture above shows the ready designs. `watch-rings` moves each ring with its own
 voice band, and thinking and working are distinct animations in every design. See the
 [changelog](CHANGELOG.md#020---unreleased-date-to-set-at-release).
 
@@ -57,7 +59,7 @@ cargo add abstractavatar
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
-let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let frame = Frame::new(AvatarStyle::WatchHalo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
 let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
 let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
 ```
@@ -72,7 +74,7 @@ Install from PyPI with Python 3.10+:
 ```sh
 python -m pip install abstractavatar
 python -m abstractavatar catalog
-python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+python -m abstractavatar render --style watch-halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
 
 Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. On other platforms pip builds the
@@ -86,13 +88,14 @@ library from the source distribution, which needs Rust 1.87+. To build from a ch
 - **Python/native:** request RGBA pixels through the binding or the C interface and present them
   with your UI toolkit.
 
-Store catalog style identifiers, rather than numeric indices. Supply time explicitly, stop
+Store catalog style identifiers, rather than numeric indices. Offer users only the ready designs
+(`AvatarStyle::ready()`, Python `ready()`, `avatar_ready_*`). Supply time explicitly, stop
 animation while hidden, and use a static frame when reduced motion is enabled. Platform adapters
 do not need their own geometry implementations.
 
 The catalog includes shaded characters, particle orbs, forms, machines, cosmic and nature scenes
-and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, retired keys and the
-design guide.
+and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, ready and experimental
+designs, retired keys and the design guide.
 
 ## Documentation
 
@@ -121,7 +124,7 @@ the Python API and preview command.
 ```sh
 python -m pip install abstractavatar
 python -m abstractavatar catalog
-python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+python -m abstractavatar render --style watch-halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
 
 Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. Elsewhere pip builds it from the
@@ -137,7 +140,7 @@ live integrations; they capture one explicit time and state.
 from abstractavatar import Renderer
 
 with Renderer(width=128, height=128) as renderer:
-    pixels = renderer.render(style="halo", state="speaking", level=0.6, time=1.2)
+    pixels = renderer.render(style="watch-halo", state="speaking", level=0.6, time=1.2)
     assert len(pixels) == 128 * 128 * 4
 ```
 
@@ -156,7 +159,7 @@ cargo add abstractavatar --features ffi,json   # C ABI/WebAssembly exports and t
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
-let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let frame = Frame::new(AvatarStyle::WatchHalo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
 // Replace these flat ramps with your theme's 256 shades per material.
 let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
 let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);
@@ -235,13 +238,15 @@ See [catalog](catalog.md) and [ADR 0001](adr/0001-portable-procedural-generation
 `Renderer(width=128, height=128, library_path=None)` owns one bounded native rendering handle.
 Use it as a context manager or call `close()` when its host is disposed.
 
-`render(style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True)`
+`render(style="watch-halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True)`
 returns owned RGBA bytes. Gaze shifts only the eyes of designs whose catalog `gaze` is `"eyes"`,
 in the ready state; other designs ignore it (see [Gaze](frame-contract.md#gaze)). Store keys from `catalog()`, and use the named activity states listed
 in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
 normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
 normalized audio-band levels, low to high frequency. A retired or unknown `style` draws its
-resolved design rather than failing. `catalog()` lists the active designs; `retired()` lists the
+resolved design rather than failing. `catalog()` lists the active designs, each with a `status`
+of `"ready"` or `"experimental"`; `ready()` lists only the ready ones, the designs to offer in a
+picker or as a default (an experimental id still renders); `retired()` lists the
 retired ids with their `replacement` (or `None`), `retired_in`, `date` and `reason`;
 `resolve_style(id)` returns the active id that draws for a stored id. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
 RGB color anchors and an RGBA background; the host retains theme ownership.
@@ -252,9 +257,13 @@ specified by that object.
 
 ## Rust
 
-`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them.
+`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` and `AvatarStyle::all()` enumerate
+every active design, and `AvatarStyle::ready()` only the ready ones, the designs to offer users.
+`AvatarStyle::status()` returns `DesignStatus::Ready` or `DesignStatus::Experimental`
+(`DesignStatus::id()` is `"ready"` or `"experimental"`); `is_ready()` tests it. Status changes
+discovery only: every active design renders.
 `AvatarStyle::from_id(id)` finds an active design; `AvatarStyle::resolve(id)` always returns one:
-the design itself, a retired id's replacement, or `AvatarStyle::DEFAULT` (`Halo`).
+the design itself, a retired id's replacement, or `AvatarStyle::DEFAULT` (`WatchHalo`).
 `AvatarStyle::retired(id)` and `RETIRED` describe retired ids as `RetiredStyle` records. `AvatarPose` names
 activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling;
 `Frame::with_bands(..., bands)` adds eight measured audio bands.
@@ -279,7 +288,11 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 
 [`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
-Catalog field 5 is the design's gaze component (`eyes` or `none`). `avatar_retired_count` and
+Catalog field 5 is the design's gaze component (`eyes` or `none`); field 6 is its status
+(`ready` or `experimental`). `avatar_ready_count` and `avatar_ready_style(index)` list the
+catalog codes of the ready designs, in catalog order (`avatar_ready_style` returns `UINT32_MAX`
+out of range). `avatar_abi_minor` is 1 for this revision of ABI 1; every ABI 1.0 export is
+unchanged, so a host that reads only fields 0..5 keeps working. `avatar_retired_count` and
 `avatar_retired_field_ptr`/`_len` list retired ids (fields: id, replacement id or empty, version,
 date, reason); `avatar_default_style` returns the code an unknown id should draw.
 
@@ -304,7 +317,7 @@ A versioned JSON object describes a frame request:
 ```json
 {
   "schema_version": 1,
-  "style": "halo",
+  "style": "watch-halo",
   "state": "speaking",
   "time": 1.2,
   "level": 0.6,
@@ -319,7 +332,8 @@ motion from the level and time.
 The descriptor names trusted built-in generation. It contains no code, shader source, file path,
 URL or library name. Unsupported versions, states and fields are explicit errors. `style` is any
 id of 1 to 64 bytes: an active id draws that design, a retired id draws its replacement, and any
-other id draws the default design `halo` (see [retired designs](catalog.md#retired-designs)).
+other id draws the default design `watch-halo` (see [retired designs](catalog.md#retired-designs)).
+An experimental id draws that design too: status only decides what a host offers.
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
@@ -466,8 +480,10 @@ label. See [the frame contract](frame-contract.md) and [ADR 0002](adr/0002-mater
 # Catalog and activity
 
 `catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
-stable style key, display name, description, family, source reference and gaze component. `catalog.json` records
-the design provenance, the default design and the retired designs.
+stable style key, display name, description, family, source reference, gaze component and status
+(`ready` or `experimental`, see [ready and experimental designs](#ready-and-experimental-designs)).
+`catalog.json` records the design provenance, the default design and the retired designs; its
+[JSON Schema](../schema/catalog.schema.json) describes every field.
 
 The catalog preserves shaded terminal characters separately from particle designs whose names
 overlap. For example, a shaded Halo and the Watch Halo remain separate choices. The `halo`,
@@ -524,36 +540,50 @@ assuming a fixed number or ordering. See [API](api.md) and [frame contract](fram
 ## Retired designs
 
 A retired key leaves the catalog but stays reserved, and it always renders: a stored identity
-that names it draws its replacement, or the default design `halo` when it has none. Any other
-unknown key also draws `halo`. `AvatarStyle::resolve` (Rust), `resolve_style` (Python) and the
+that names it draws its replacement, or the default design `watch-halo` when it has none. Any
+other unknown key also draws `watch-halo`. Every replacement is a ready design. `AvatarStyle::resolve` (Rust), `resolve_style` (Python) and the
 `avatar_retired_*` exports (C/WebAssembly) apply this rule; `catalog.json` lists the same records
 under `retired`.
 
 | Retired key | Draws | Status |
 |---|---|---|
-| `eye` | `watch-eye` | Removed in 0.2.0 |
-| `watch-drop` | `halo` | Removed in 0.2.0 |
-| `watch-shape-kitty`, `watch-shape-face` | `halo` | Removed in 0.2.0 |
+| `eye` | `watch-well` | Removed in 0.2.0 |
+| `watch-drop` | `watch-halo` | Removed in 0.2.0 |
+| `watch-shape-kitty`, `watch-shape-face` | `watch-halo` | Removed in 0.2.0 |
 | `watch-shape-wave` | `watch-wave` | Removed in 0.2.0 |
-| `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane` | `halo` | Awaiting a redesign |
+| `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane` | `watch-halo` | Awaiting a redesign |
 | `watch-lens`, `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`, `watch-sentinel` | `watch-hover` | Awaiting a redesign |
 
 A design awaiting a redesign returns under its original key, so stored identities pick it up.
 
 ## Design guide
 
-`halo`, `watch-wave`, `watch-well`, `watch-hover` and `iphone-weave` set the style for every
-design:
+### Ready and experimental designs
+
+A **ready** design meets this guide in every state and is approved for users. Ready designs are
+the only ones a host offers: in a picker, in a list, or as a default. Seven designs are ready:
+`watch-halo`, `watch-rings`, `watch-wave`, `watch-well`, `watch-murmuration`, `watch-hover` and
+`iphone-weave`. The default design (`watch-halo`) and every retired-key replacement are ready.
+
+The other 20 designs are **experimental**: not ready for users. They stay in the catalog and
+render whenever a stored identity or a host asks for them by key, so nothing refuses or redraws
+them, but pickers and defaults do not surface them. List what to offer with `ready()` (Python),
+`AvatarStyle::ready()` (Rust) or `avatar_ready_count`/`avatar_ready_style` (C/WebAssembly); each
+catalog record also carries its `status`. An experimental design becomes ready when it is
+approved, under the same key.
+
+### Principles
+
+`watch-wave`, `watch-well`, `watch-hover` and `iphone-weave` set the style for every design:
 
 - **One clear idea per state.** `watch-wave` is calm ribbons at rest, harmonics while voiced and
   a swirl while working; `iphone-weave` is loose cords that become a globe to listen and a raised
   hand to wait. Each state reads at a glance, even in a still frame.
 - **Thinking inward, working outward.** `watch-well` draws its two masses close and circles them
-  slowly to think, and swings them wider and faster to work; `halo` turns its crown and sweeps
-  its highlight to think, and spins its orbit faster to work. Contemplation contracts and slows;
+  slowly to think, and swings them wider and faster to work. Contemplation contracts and slows;
   activity spreads and speeds up.
 - **Listening takes in, speaking gives out.** Intake travels toward the centre and speech travels
-  away from it (`halo`'s streamers, `watch-wave`'s incoming and outgoing wavefronts).
+  away from it (`watch-wave`'s incoming and outgoing wavefronts).
 - **The voice moves a part, not the whole.** Ribbons, rings or eyes answer the level and bands;
   the body stays recognisable.
 - **Recognisable characters.** `watch-hover` is a believable object: an opaque shell, a visor,
@@ -618,9 +648,15 @@ Use `library_path` only for a trusted explicit build. See [getting started](gett
 
 ## A stored avatar draws a different design
 
-The stored id is retired or unknown. It draws its replacement, or `halo` when it has none (see
-[retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to find
-the id and offer a new choice from `catalog()`.
+The stored id is retired or unknown. It draws its replacement, or `watch-halo` when it has none
+(see [retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to
+find the id and offer a new choice from `ready()`.
+
+## A design is missing from a picker
+
+It is experimental. Pickers list only ready designs (see
+[ready and experimental designs](catalog.md#ready-and-experimental-designs)); a stored or explicit
+experimental key still renders.
 
 ## A descriptor is rejected
 
@@ -668,7 +704,8 @@ Follow the [design guide](docs/catalog.md#design-guide): thinking and working mu
 animations, and `cargo test` checks it.
 
 Preserve existing style keys and the published ABI contract. Add rather than repurpose catalog
-entries. To remove a design, add it to `RETIRED` in `src/catalog.rs` and to `retired` in
+entries. A new design starts `experimental`; it becomes `ready` (in `AvatarStyle::status` and
+`catalog.json`) only when the maintainer approves it. To remove a design, add it to `RETIRED` in `src/catalog.rs` and to `retired` in
 `catalog.json` with a reason and a replacement where one fits; never reuse a retired key for a
 different design. Changes to ownership or frame semantics belong in [architecture decisions](docs/adr/0001-portable-procedural-generation.md).
 
@@ -795,8 +832,8 @@ SOFTWARE.
 
 ## [0.2.0] - unreleased, date to set at release
 
-This release changes the catalog: 17 designs leave it. Stored ids keep rendering (see
-Migration).
+This release changes the catalog: 17 designs leave it, and only seven of the 27 that remain are
+ready to offer users. Stored ids keep rendering (see Migration).
 
 ### Removed
 
@@ -813,16 +850,31 @@ Migration).
 ### Added
 
 - Retired ids resolve instead of failing. `AvatarStyle::resolve(id)` returns the active design,
-  a retired id's replacement, or `AvatarStyle::DEFAULT` (`halo`) for a retired id without one
-  and for any unknown id. `AvatarStyle::retired(id)` and `RETIRED` describe each retired id
+  a retired id's replacement, or `AvatarStyle::DEFAULT` (`watch-halo`) for a retired id without
+  one and for any unknown id. `AvatarStyle::retired(id)` and `RETIRED` describe each retired id
   (version, decision date, reason, replacement).
 - `catalog.json` gains `default` and a `retired` list with the same records.
 - C/WebAssembly exports `avatar_default_style`, `avatar_retired_count`,
   `avatar_retired_field_ptr` and `avatar_retired_field_len` (ABI 1, additive).
 - Python `retired()` and `resolve_style(id)`. `Renderer.render` and `render_descriptor` draw a
   retired or unknown id as its resolved design.
+- Design status. Each active design is `ready` or `experimental`. Seven are ready: `watch-halo`,
+  `watch-rings`, `watch-wave`, `watch-well`, `watch-murmuration`, `watch-hover` and
+  `iphone-weave`; the other 20 are experimental, not ready for users. Hosts offer only ready
+  designs in pickers, lists and defaults; an experimental design still renders when a key names
+  it. Rust: `AvatarStyle::status()`, `is_ready()`, `AvatarStyle::ready()` and
+  `AvatarStyle::all()`, and `DesignStatus`. C/WebAssembly (ABI 1.1, additive): catalog field 6
+  (`ready` or `experimental`), `avatar_ready_count`, `avatar_ready_style` and
+  `avatar_abi_minor`. Python: a `status` key in `catalog()` records and `ready()`.
+  `catalog.json`: `schema_minor` 1 and a `status` per design, described by
+  `schema/catalog.schema.json`.
 
 ### Changed
+
+- The default design is `watch-halo` (was `halo`): an unknown id, a retired id without a
+  replacement, Python `Renderer.render()` without a style and the CLI `render` command draw it.
+  `AvatarStyle::default()` is `WatchHalo`. The retired `eye` now draws `watch-well` (was
+  `watch-eye`, which is experimental), so every fallback is a ready design.
 
 - `watch-rings` moves each of its six rings with its own part of the voice. With measured
   `bands`, ring 1 follows the lowest bands and ring 6 the highest; each ring tilts, swells and
@@ -847,10 +899,14 @@ Migration).
 ### Migration
 
 - Persist ids, never catalog codes. Look codes up from the installed catalog.
-- A stored retired id renders its replacement: `eye` draws `watch-eye`; `watch-lens`,
+- A stored retired id renders its replacement: `eye` draws `watch-well`; `watch-lens`,
   `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`
   and `watch-sentinel` draw `watch-hover`; `watch-shape-wave` draws `watch-wave`. The others
-  draw `halo`. To offer a new choice, compare the stored id with the retired list.
+  draw `watch-halo`. To offer a new choice, compare the stored id with the retired list.
+- Build pickers from the ready list (`ready()`, `AvatarStyle::ready()`, `avatar_ready_*`), not
+  from the whole catalog. A stored experimental id keeps rendering; show it as the current
+  choice without listing it among the options. A host that needs a default uses
+  `watch-halo`.
 - Hosts that resolve a style from the catalog themselves should apply the retired list
   (`avatar_retired_*` or `catalog.json`) before treating an id as unknown.
 

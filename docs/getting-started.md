@@ -8,7 +8,7 @@ the Python API and preview command.
 ```sh
 python -m pip install abstractavatar
 python -m abstractavatar catalog
-python -m abstractavatar render --style halo --state speaking --level 0.6 --size 128 --output avatar.png
+python -m abstractavatar render --style watch-halo --state speaking --level 0.6 --size 128 --output avatar.png
 ```
 
 Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 include the compiled native library. Elsewhere pip builds it from the
@@ -24,7 +24,7 @@ live integrations; they capture one explicit time and state.
 from abstractavatar import Renderer
 
 with Renderer(width=128, height=128) as renderer:
-    pixels = renderer.render(style="halo", state="speaking", level=0.6, time=1.2)
+    pixels = renderer.render(style="watch-halo", state="speaking", level=0.6, time=1.2)
     assert len(pixels) == 128 * 128 * 4
 ```
 
@@ -43,7 +43,7 @@ cargo add abstractavatar --features ffi,json   # C ABI/WebAssembly exports and t
 ```rust
 use abstractavatar::{AvatarPose, AvatarStyle, Frame, Gaze, Palette};
 
-let frame = Frame::new(AvatarStyle::Halo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
+let frame = Frame::new(AvatarStyle::WatchHalo, AvatarPose::Speaking, 0.6, 1.2, Gaze::default());
 // Replace these flat ramps with your theme's 256 shades per material.
 let palette: Palette = [[0xffc060ff; 256], [0xff7070ff; 256], [0xd8e0ffff; 256]];
 let rgba = frame.rgba(0.2, -0.1, 2.0 / 128.0, &palette);

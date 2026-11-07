@@ -9,9 +9,15 @@ Use `library_path` only for a trusted explicit build. See [getting started](gett
 
 ## A stored avatar draws a different design
 
-The stored id is retired or unknown. It draws its replacement, or `halo` when it has none (see
-[retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to find
-the id and offer a new choice from `catalog()`.
+The stored id is retired or unknown. It draws its replacement, or `watch-halo` when it has none
+(see [retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to
+find the id and offer a new choice from `ready()`.
+
+## A design is missing from a picker
+
+It is experimental. Pickers list only ready designs (see
+[ready and experimental designs](catalog.md#ready-and-experimental-designs)); a stored or explicit
+experimental key still renders.
 
 ## A descriptor is rejected
 
