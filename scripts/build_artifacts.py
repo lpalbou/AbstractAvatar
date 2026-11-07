@@ -4,6 +4,7 @@ from pathlib import Path
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,15 @@ def source_hash():
         digest.update(source.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def crate_version():
+    """The [package] version from Cargo.toml, so provenance never drifts from the crate."""
+    package = (ROOT / "Cargo.toml").read_text(encoding="utf-8").split("[package]", 1)[1].split("\n[", 1)[0]
+    found = re.search(r'^version\s*=\s*"([^"]+)"', package, re.MULTILINE)
+    if not found:
+        raise SystemExit("Cargo.toml has no [package] version")
+    return found.group(1)
 
 
 def main():
@@ -62,7 +72,7 @@ def main():
         binary = ROOT / "target" / "wasm32-unknown-unknown" / "release" / "abstractavatar.wasm"
         data = binary.read_bytes()
         (output / "avatar_core.wasm").write_bytes(data)
-        metadata = {"abi": 1, "source": "abstractavatar", "crate_version": "0.1.1", "source_sha256": source_hash(), "wasm_sha256": hashlib.sha256(data).hexdigest(), "build": "python3 abstractavatar/scripts/build_artifacts.py", "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip()}
+        metadata = {"abi": 1, "source": "abstractavatar", "crate_version": crate_version(), "source_sha256": source_hash(), "wasm_sha256": hashlib.sha256(data).hexdigest(), "build": "python3 abstractavatar/scripts/build_artifacts.py", "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip()}
         (output / "provenance.json").write_text(json.dumps(metadata, indent=2) + "\n")
         if args.uic_dir:
             args.uic_dir.mkdir(parents=True, exist_ok=True)
