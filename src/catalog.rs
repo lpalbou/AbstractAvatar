@@ -90,7 +90,7 @@ impl AvatarStyle {
     pub fn retired(id: &str) -> Option<&'static RetiredStyle> {
         RETIRED.iter().find(|r| r.id == id)
     }
-    /// The six shaded designs sampled analytically; every other design is a stroke scene.
+    /// The five shaded designs sampled analytically; every other design is a stroke scene.
     pub(crate) fn analytic(self) -> bool {
         matches!(
             self,

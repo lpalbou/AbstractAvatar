@@ -395,7 +395,7 @@ pub(crate) fn build(
         Style::WatchCrystal => crystal(&mut out, s),
         Style::WatchEclipse => eclipse(&mut out, s),
         Style::WatchSynapse => synapse(&mut out, s),
-        Style::WatchWave => wave(&mut out, s, false),
+        Style::WatchWave => wave(&mut out, s),
         Style::WatchWell => well(&mut out, s),
         Style::WatchBlackHole => blackhole(&mut out, s),
         Style::WatchAccretion => accretion(&mut out, s),
@@ -406,7 +406,8 @@ pub(crate) fn build(
         Style::WatchHover => hover_machine(&mut out, s),
         Style::WatchOcean => ocean(&mut out, s),
         Style::IphoneWeave => weave(&mut out, s),
-        _ => {}
+        // Sampled analytically in lib.rs; Frame never builds a scene for them.
+        Style::Halo | Style::Hover | Style::Vortex | Style::Eclipse | Style::Rover => {}
     }
     // Waiting and Error extend the five original Apple phases with readable,
     // non-audio status cues; the avatar identity remains intact underneath.
@@ -928,7 +929,7 @@ fn synapse(out: &mut Scene, s: State) {
 }
 // OrbConcepts.drawWave: five translucent ribbons, outgoing/incoming voice
 // wavefronts, and five spiral arms while tools work. OrbShape.wave is separate.
-fn wave(out: &mut Scene, s: State, _membrane: bool) {
+fn wave(out: &mut Scene, s: State) {
     let voiced = s.listening() + s.speaking();
     for k in 0..5 {
         let fk = k as f32;

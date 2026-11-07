@@ -14,7 +14,8 @@ Migration).
   `watch-sentinel` leave the catalog until they are redesigned from their Apple Watch originals.
   A redesigned face returns under its original id.
 - The catalog lists 27 designs. Numeric catalog codes are positions in the installed catalog, so
-  the codes after `eclipse` (3) change; ids do not.
+  the codes after `eclipse` (3) change (`rover` is 4); ids do not. The 0.1.0 promise that the
+  first six codes keep their ordering no longer holds: resolve codes from the catalog by id.
 
 ### Added
 

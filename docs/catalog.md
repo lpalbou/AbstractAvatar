@@ -30,10 +30,10 @@ The application decides the state. AbstractAvatar does not infer it from a conne
 microphone. Audio level, optional audio bands and optional gaze add visual input to the selected
 state.
 
-Thinking and working are distinct animations in every design. Thinking draws inward and moves
-slowly: forms contract, light travels toward the centre, eyes look up or narrow. Working reaches
-outward and moves fast: forms spread, light travels away from the centre, parts spin, roll or
-flare.
+Thinking and working are distinct animations in every design. As a rule, thinking is inward and
+slow: forms gather or turn calmly, light travels toward the centre, eyes look up or narrow.
+Working is outward and busy: forms spread, light travels away from the centre, parts spin, roll
+or flare.
 
 ## Audio bands
 

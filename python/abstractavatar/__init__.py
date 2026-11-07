@@ -156,8 +156,8 @@ def validate_descriptor(value: dict[str, Any] | str, *, styles: set[str] | None 
         raise ValueError("Avatar descriptor has unknown or missing fields")
     if isinstance(value["schema_version"], bool) or not isinstance(value["schema_version"], (int, float)) or value["schema_version"] != 1:
         raise ValueError("Unsupported avatar schema_version")
-    if not isinstance(value["style"], str) or not value["style"] or len(value["style"]) > 64:
-        raise ValueError("Avatar style must be a nonempty identifier of at most 64 characters")
+    if not isinstance(value["style"], str) or not value["style"] or len(value["style"].encode("utf-8")) > 64:
+        raise ValueError("Avatar style must be a nonempty identifier of at most 64 UTF-8 bytes")
     if styles is not None and value["style"] not in styles:
         raise ValueError("Unknown avatar style")
     if value["state"] not in _STATES:
@@ -186,8 +186,10 @@ class Renderer:
         self.width, self.height = width, height
         self._lock = threading.RLock()
         self._library = _library(library_path)
-        self._library_path = library_path
         self._styles = {r["id"]: r["code"] for r in catalog(library_path)}
+        # Retired ids map to the design they draw; any other unknown id draws the default.
+        self._default = resolve_style("", library_path)
+        self._retired = {r["id"]: resolve_style(r["id"], library_path) for r in retired(library_path)}
         self._handle = int(self._library.avatar_create(width, height))
         if not self._handle:
             raise RuntimeError("AbstractAvatar renderer capacity exceeded (at most 16 live renderers)")
@@ -225,8 +227,8 @@ class Renderer:
 
         A retired or unknown ``style`` renders its replacement or the default design
         (see :func:`resolve_style`)."""
-        if isinstance(style, str) and style not in self._styles:
-            style = resolve_style(style, self._library_path)
+        if isinstance(style, str) and style not in self._styles and 0 < len(style.encode("utf-8")) <= 64:
+            style = self._retired.get(style, self._default)
         desc = {"schema_version": 1, "style": style, "state": state, "time": time, "level": level, "gaze": gaze}
         if bands is not None:
             desc["bands"] = bands

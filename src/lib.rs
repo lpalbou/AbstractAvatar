@@ -994,9 +994,10 @@ mod tests {
             (-GAZE_REACH[0], GAZE_REACH[1])
         );
     }
-    /// Thinking (inward, contemplative) and working (outward, busy) must read as different
-    /// animations, not one motion at another moment: every thinking frame must stay
-    /// measurably far from the nearest working frame at any time in an 8 s window.
+    /// Thinking and working must read as different animations, not one motion at another
+    /// moment: every thinking frame must stay measurably far from the nearest working frame
+    /// at any time in an 8 s window. This checks distinctness only; the direction of each
+    /// (thinking inward, working outward) is the design guide's rule, reviewed by eye.
     #[test]
     fn thinking_and_working_are_different_animations() {
         let mut palette = [[0u32; 256]; 3];

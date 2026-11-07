@@ -11,6 +11,8 @@ extern "C" {
  * Retired keys stay reserved: draw a retired key's replacement field, or when it is empty
  * (and for any unknown key) the avatar_default_style() code. Retired fields0..4:
  * key,replacement key(""=default),retired in version,decision date,reason.
+ * A field is valid for exactly len bytes; with len 0 the pointer may be non-null and must
+ * not be read.
  * Pose0..6: Ready,Thinking,Working,Listening,Speaking,Waiting,Error.
  * Palette material0..2: Warm,Eye,Dim; index0..255; rgba0xRRGGBBAA.
  * Set all768 shades before draw. Dimensions1..512; at most16 live handles.

@@ -106,6 +106,9 @@ class NativeTests(unittest.TestCase):
                 renderer.set_palette(warm=(0, 999, 0))
             with self.assertRaises(ValueError):
                 renderer.render(style=7)
+            for bad in ["", "x" * 65, "é" * 40]:
+                with self.assertRaises(ValueError):
+                    renderer.render(style=bad)
             with self.assertRaises(ValueError):
                 renderer.render(transparent="false")
             base = renderer.render("watch-rings", "speaking", .6, 1, bands=[0] * 8)
