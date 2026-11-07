@@ -10,7 +10,10 @@ returns owned RGBA bytes. Gaze shifts only the eyes of designs whose catalog `ga
 in the ready state; other designs ignore it (see [Gaze](frame-contract.md#gaze)). Store keys from `catalog()`, and use the named activity states listed
 in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
 normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
-normalized audio-band levels. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
+normalized audio-band levels, low to high frequency. A retired or unknown `style` draws its
+resolved design rather than failing. `catalog()` lists the active designs; `retired()` lists the
+retired ids with their `replacement` (or `None`), `retired_in`, `date` and `reason`;
+`resolve_style(id)` returns the active id that draws for a stored id. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
 RGB color anchors and an RGBA background; the host retains theme ownership.
 
 `render_descriptor()` consumes the bounded parameter object described in
@@ -19,8 +22,12 @@ specified by that object.
 
 ## Rust
 
-`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
-activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
+`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them.
+`AvatarStyle::from_id(id)` finds an active design; `AvatarStyle::resolve(id)` always returns one:
+the design itself, a retired id's replacement, or `AvatarStyle::DEFAULT` (`Halo`).
+`AvatarStyle::retired(id)` and `RETIRED` describe retired ids as `RetiredStyle` records. `AvatarPose` names
+activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling;
+`Frame::with_bands(..., bands)` adds eight measured audio bands.
 `AvatarStyle::gaze()` returns the component a gaze moves, `"eyes"` or `"none"`; `GAZE_REACH`
 is the largest eye shift, `[0.05, 0.025]` of the avatar radius.
 `Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
@@ -42,7 +49,9 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 
 [`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
-Catalog field 5 is the design's gaze component (`eyes` or `none`).
+Catalog field 5 is the design's gaze component (`eyes` or `none`). `avatar_retired_count` and
+`avatar_retired_field_ptr`/`_len` list retired ids (fields: id, replacement id or empty, version,
+date, reason); `avatar_default_style` returns the code an unknown id should draw.
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
 use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.

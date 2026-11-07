@@ -16,9 +16,13 @@ A versioned JSON object describes a frame request:
 ```
 
 A machine-readable [JSON Schema](../schema/descriptor.schema.json) defines the fields. Optional
-`bands` contains exactly eight normalized audio-band levels; omitting it uses the scalar level.
+`bands` contains exactly eight normalized audio-band levels, from low to high frequency. Omit it
+when you only measure a level: band-aware designs such as `watch-rings` then derive a spread of
+motion from the level and time.
 The descriptor names trusted built-in generation. It contains no code, shader source, file path,
-URL or library name. Unsupported versions, styles, states and fields are explicit errors.
+URL or library name. Unsupported versions, states and fields are explicit errors. `style` is any
+id of 1 to 64 bytes: an active id draws that design, a retired id draws its replacement, and any
+other id draws the default design `halo` (see [retired designs](catalog.md#retired-designs)).
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
@@ -31,8 +35,8 @@ Gaze moves eyes only. Each catalog design declares a `gaze` component:
 
 | `gaze` | Designs | Effect of a gaze input |
 |---|---|---|
-| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (for example `hover`, `rover`, `eye`, `watch-hover`, `watch-rover`, `watch-face`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
-| `none` | Orbs, forms, cosmic scenes, nature scenes, silhouettes, the woven orb and machines without looking eyes | Ignored. The frame is identical with or without gaze. |
+| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (`hover`, `rover`, `watch-eye`, `watch-hover`, `watch-rover`, `watch-spark`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
+| `none` | Orbs, forms, cosmic scenes, nature scenes and the woven orb | Ignored. The frame is identical with or without gaze. |
 
 Gaze applies in the `ready` state; every other state ignores it so that activity motion stays
 readable. The generator is stateless and frames are a pure function of their inputs, so temporal

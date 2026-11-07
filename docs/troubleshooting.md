@@ -7,7 +7,13 @@ Rust 1.87+ and `python -m pip install .`. A source checkout alone does not inclu
 native library.
 Use `library_path` only for a trusted explicit build. See [getting started](getting-started.md).
 
-## A style or descriptor is rejected
+## A stored avatar draws a different design
+
+The stored id is retired or unknown. It draws its replacement, or `halo` when it has none (see
+[retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to find
+the id and offer a new choice from `catalog()`.
+
+## A descriptor is rejected
 
 Run `python -m abstractavatar catalog` and use a supported stable key. Check schema version,
 state, finite numeric values and unknown fields against [the frame contract](frame-contract.md).

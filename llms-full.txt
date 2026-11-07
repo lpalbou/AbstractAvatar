@@ -41,9 +41,10 @@ the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
 
-**What's new in 0.1.1:** gaze moves the eyes only. Each catalog design declares a `gaze`
-component (`"eyes"` or `"none"`); a gaze input shifts only the eyes of `eyes` designs, and every
-other design draws the same frame with or without it. See the [changelog](CHANGELOG.md#011---2026-11-03).
+**What's new in 0.2.0:** the catalog keeps 27 designs; 17 are retired, and a stored retired or
+unknown id still renders (its replacement, or `halo`). `watch-rings` moves each ring with its own
+voice band, and thinking and working are distinct animations in every design. See the
+[changelog](CHANGELOG.md#020---unreleased-date-to-set-at-release).
 
 ## Start with Rust
 
@@ -89,8 +90,9 @@ Store catalog style identifiers, rather than numeric indices. Supply time explic
 animation while hidden, and use a static frame when reduced motion is enabled. Platform adapters
 do not need their own geometry implementations.
 
-The catalog includes shaded characters, particle orbs, forms, portraits, machines, nature scenes
-and a woven orb. [Catalog guidance](docs/catalog.md) explains source variants and stable keys.
+The catalog includes shaded characters, particle orbs, forms, machines, cosmic and nature scenes
+and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, retired keys and the
+design guide.
 
 ## Documentation
 
@@ -238,7 +240,10 @@ returns owned RGBA bytes. Gaze shifts only the eyes of designs whose catalog `ga
 in the ready state; other designs ignore it (see [Gaze](frame-contract.md#gaze)). Store keys from `catalog()`, and use the named activity states listed
 in [the catalog guide](catalog.md). An explicit `library_path` selects a trusted native build;
 normal usage loads the library bundled in the Python package. Optional `bands` supplies eight
-normalized audio-band levels. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
+normalized audio-band levels, low to high frequency. A retired or unknown `style` draws its
+resolved design rather than failing. `catalog()` lists the active designs; `retired()` lists the
+retired ids with their `replacement` (or `None`), `retired_in`, `date` and `reason`;
+`resolve_style(id)` returns the active id that draws for a stored id. `set_palette(warm=..., eye=..., dim=..., ground=...)` takes three
 RGB color anchors and an RGBA background; the host retains theme ownership.
 
 `render_descriptor()` consumes the bounded parameter object described in
@@ -247,8 +252,12 @@ specified by that object.
 
 ## Rust
 
-`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them. `AvatarPose` names
-activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling.
+`AvatarStyle` names the built-in designs; `AvatarStyle::ALL` enumerates them.
+`AvatarStyle::from_id(id)` finds an active design; `AvatarStyle::resolve(id)` always returns one:
+the design itself, a retired id's replacement, or `AvatarStyle::DEFAULT` (`Halo`).
+`AvatarStyle::retired(id)` and `RETIRED` describe retired ids as `RetiredStyle` records. `AvatarPose` names
+activity. `Frame::new(style, pose, level, time, gaze)` prepares geometry for repeated sampling;
+`Frame::with_bands(..., bands)` adds eight measured audio bands.
 `AvatarStyle::gaze()` returns the component a gaze moves, `"eyes"` or `"none"`; `GAZE_REACH`
 is the largest eye shift, `[0.05, 0.025]` of the avatar radius.
 `Frame::rgba(x, y, pixel_size, &palette)` returns a composited, straight-alpha RGBA8 foreground.
@@ -270,7 +279,9 @@ UI toolkit. The optional descriptor feature parses the versioned parameter objec
 
 [`avatar.h`](../avatar.h) is the C ABI reference. The `avatar_*` exports enumerate metadata,
 create and release handles, set palettes and gaze, render a frame and expose its pixel buffer.
-Catalog field 5 is the design's gaze component (`eyes` or `none`).
+Catalog field 5 is the design's gaze component (`eyes` or `none`). `avatar_retired_count` and
+`avatar_retired_field_ptr`/`_len` list retired ids (fields: id, replacement id or empty, version,
+date, reason); `avatar_default_style` returns the code an unknown id should draw.
 
 `avatar_render_copy` renders and copies into caller-owned memory under the native registry lock;
 use it for native integrations. The borrowed-pointer functions (`avatar_render` with `avatar_pixels`) require caller synchronization.
@@ -302,9 +313,13 @@ A versioned JSON object describes a frame request:
 ```
 
 A machine-readable [JSON Schema](../schema/descriptor.schema.json) defines the fields. Optional
-`bands` contains exactly eight normalized audio-band levels; omitting it uses the scalar level.
+`bands` contains exactly eight normalized audio-band levels, from low to high frequency. Omit it
+when you only measure a level: band-aware designs such as `watch-rings` then derive a spread of
+motion from the level and time.
 The descriptor names trusted built-in generation. It contains no code, shader source, file path,
-URL or library name. Unsupported versions, styles, states and fields are explicit errors.
+URL or library name. Unsupported versions, states and fields are explicit errors. `style` is any
+id of 1 to 64 bytes: an active id draws that design, a retired id draws its replacement, and any
+other id draws the default design `halo` (see [retired designs](catalog.md#retired-designs)).
 Dimensions and palette are supplied by the renderer/host, outside the descriptor.
 
 Time is elapsed seconds in 0..86400. Audio level is normalized from 0 to 1. Gaze uses centered coordinates
@@ -317,8 +332,8 @@ Gaze moves eyes only. Each catalog design declares a `gaze` component:
 
 | `gaze` | Designs | Effect of a gaze input |
 |---|---|---|
-| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (for example `hover`, `rover`, `eye`, `watch-hover`, `watch-rover`, `watch-face`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
-| `none` | Orbs, forms, cosmic scenes, nature scenes, silhouettes, the woven orb and machines without looking eyes | Ignored. The frame is identical with or without gaze. |
+| `eyes` | Designs that draw distinct eyes: pupils, irises or eye lamps (`hover`, `rover`, `watch-eye`, `watch-hover`, `watch-rover`, `watch-spark`) | The eyes shift toward the gaze, at most `GAZE_REACH` = 0.05 of the avatar radius horizontally and 0.025 vertically. The body, head, shell and every other part stay still. |
+| `none` | Orbs, forms, cosmic scenes, nature scenes and the woven orb | Ignored. The frame is identical with or without gaze. |
 
 Gaze applies in the `ready` state; every other state ignores it so that activity motion stays
 readable. The generator is stateless and frames are a pure function of their inputs, so temporal
@@ -452,15 +467,14 @@ label. See [the frame contract](frame-contract.md) and [ADR 0002](adr/0002-mater
 
 `catalog()` and the native catalog exports enumerate the supported designs. Each entry carries a
 stable style key, display name, description, family, source reference and gaze component. `catalog.json` records
-the design provenance.
+the design provenance, the default design and the retired designs.
 
 The catalog preserves shaded terminal characters separately from particle designs whose names
-overlap. For example, a shaded Halo and the Watch Halo remain separate choices. Existing
-`halo`, `hover`, `vortex`, `eclipse`, `eye` and `rover` keys keep their meaning; Apple-inspired
-variants use their own keys.
+overlap. For example, a shaded Halo and the Watch Halo remain separate choices. The `halo`,
+`hover`, `vortex`, `eclipse` and `rover` keys keep their meaning; Apple-inspired variants use
+their own keys.
 
-Families include orbs, forms, cosmic scenes, portraits, machines, nature and the iPhone weave.
-Additional point-body shapes are distinct from the similarly named portrait/form scenes.
+Families include orbs, forms, cosmic scenes, machines, nature and the iPhone weave.
 Platform sampling and palette can affect appearance; the shared generator supplies the geometry
 and motion. The source Apple applications retain their own implementations until separately
 integrated.
@@ -478,19 +492,75 @@ integrated.
 | error | An operation failed |
 
 The application decides the state. AbstractAvatar does not infer it from a connection, model or
-microphone. Audio level and optional gaze add visual input to the selected state.
+microphone. Audio level, optional audio bands and optional gaze add visual input to the selected
+state.
+
+Thinking and working are distinct animations in every design. Thinking draws inward and moves
+slowly: forms contract, light travels toward the centre, eyes look up or narrow. Working reaches
+outward and moves fast: forms spread, light travels away from the centre, parts spin, roll or
+flare.
+
+## Audio bands
+
+`bands` carries eight normalized levels from low to high frequency. `watch-rings` gives each of
+its six rings its own part of the spectrum: the first ring follows the lowest bands and the last
+the highest, and each ring tilts, swells and brightens with its band. A ring pushes out while
+speaking and draws in while listening. When a host sends only a level, each ring follows that
+level through its own rhythm, so the rings still move one by one.
 
 ## Gaze component
 
 `gaze` names the one part of a design that may follow a host-supplied gaze. `eyes` designs
-(`hover`, `eye`, `rover`, `watch-face`, `watch-eye`, `watch-lens`, `watch-dome`, `watch-valet`,
-`watch-retro`, `watch-deco`, `watch-rover`, `watch-hover`, `watch-spark` and `watch-android`)
-shift their pupils, irises or eye lamps by a small bounded offset while ready. Every other
-design is `none` and ignores gaze. See [the frame contract](frame-contract.md#gaze).
+(`hover`, `rover`, `watch-eye`, `watch-rover`, `watch-hover` and `watch-spark`) shift their
+pupils, irises or eye lamps by a small bounded offset while ready. Every other design is `none`
+and ignores gaze. See [the frame contract](frame-contract.md#gaze).
 
-Persist keys, not a display name or array index. Query the installed catalog rather than assuming
-a fixed number or ordering beyond the documented compatibility prefix. See [API](api.md) and
-[frame contract](frame-contract.md).
+## Stable keys
+
+Persist keys, not a display name or array index. A numeric catalog code is a position in the
+installed catalog and changes when a design is retired. Query the installed catalog rather than
+assuming a fixed number or ordering. See [API](api.md) and [frame contract](frame-contract.md).
+
+## Retired designs
+
+A retired key leaves the catalog but stays reserved, and it always renders: a stored identity
+that names it draws its replacement, or the default design `halo` when it has none. Any other
+unknown key also draws `halo`. `AvatarStyle::resolve` (Rust), `resolve_style` (Python) and the
+`avatar_retired_*` exports (C/WebAssembly) apply this rule; `catalog.json` lists the same records
+under `retired`.
+
+| Retired key | Draws | Status |
+|---|---|---|
+| `eye` | `watch-eye` | Removed in 0.2.0 |
+| `watch-drop` | `halo` | Removed in 0.2.0 |
+| `watch-shape-kitty`, `watch-shape-face` | `halo` | Removed in 0.2.0 |
+| `watch-shape-wave` | `watch-wave` | Removed in 0.2.0 |
+| `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane` | `halo` | Awaiting a redesign |
+| `watch-lens`, `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`, `watch-sentinel` | `watch-hover` | Awaiting a redesign |
+
+A design awaiting a redesign returns under its original key, so stored identities pick it up.
+
+## Design guide
+
+`halo`, `watch-wave`, `watch-well`, `watch-hover` and `iphone-weave` set the style for every
+design:
+
+- **One clear idea per state.** `watch-wave` is calm ribbons at rest, harmonics while voiced and
+  a swirl while working; `iphone-weave` is loose cords that become a globe to listen and a raised
+  hand to wait. Each state reads at a glance, even in a still frame.
+- **Thinking inward, working outward.** `watch-well` draws its two masses close and circles them
+  slowly to think, and swings them wider and faster to work; `halo` turns its crown and sweeps
+  its highlight to think, and spins its orbit faster to work. Contemplation contracts and slows;
+  activity spreads and speeds up.
+- **Listening takes in, speaking gives out.** Intake travels toward the centre and speech travels
+  away from it (`halo`'s streamers, `watch-wave`'s incoming and outgoing wavefronts).
+- **The voice moves a part, not the whole.** Ribbons, rings or eyes answer the level and bands;
+  the body stays recognisable.
+- **Recognisable characters.** `watch-hover` is a believable object: an opaque shell, a visor,
+  eyes that glow with its voice, arms that unfold to work. A face or machine must be recognisable
+  as what it portrays; an abstract form must keep one silhouette across every state.
+- **Restraint.** Few primitives, soft light, slow rest motion. A design never flickers and never
+  goes blank.
 
 ---
 
@@ -546,7 +616,13 @@ Rust 1.87+ and `python -m pip install .`. A source checkout alone does not inclu
 native library.
 Use `library_path` only for a trusted explicit build. See [getting started](getting-started.md).
 
-## A style or descriptor is rejected
+## A stored avatar draws a different design
+
+The stored id is retired or unknown. It draws its replacement, or `halo` when it has none (see
+[retired designs](catalog.md#retired-designs)). Call `retired()` or read `catalog.json` to find
+the id and offer a new choice from `catalog()`.
+
+## A descriptor is rejected
 
 Run `python -m abstractavatar catalog` and use a supported stable key. Check schema version,
 state, finite numeric values and unknown fields against [the frame contract](frame-contract.md).
@@ -588,9 +664,13 @@ python -m pip install .
 Keep procedural geometry in the shared Rust implementation. UI-specific clocks, preferences,
 colors, focus and input capture belong in the host. New styles need distinct visual behavior,
 source attribution, valid catalog metadata and examples of all supported activity states.
+Follow the [design guide](docs/catalog.md#design-guide): thinking and working must be distinct
+animations, and `cargo test` checks it.
 
 Preserve existing style keys and the published ABI contract. Add rather than repurpose catalog
-entries. Changes to ownership or frame semantics belong in [architecture decisions](docs/adr/0001-portable-procedural-generation.md).
+entries. To remove a design, add it to `RETIRED` in `src/catalog.rs` and to `retired` in
+`catalog.json` with a reason and a replacement where one fits; never reuse a retired key for a
+different design. Changes to ownership or frame semantics belong in [architecture decisions](docs/adr/0001-portable-procedural-generation.md).
 
 Document public API changes in [the API reference](docs/api.md) and [changelog](CHANGELOG.md).
 Keep documentation indexes current with `python scripts/docs.py`; `python scripts/docs.py --check`
@@ -713,12 +793,65 @@ SOFTWARE.
 
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - unreleased, date to set at release
+
+This release changes the catalog: 17 designs leave it. Stored ids keep rendering (see
+Migration).
+
+### Removed
+
+- `eye`, `watch-drop`, `watch-shape-kitty`, `watch-shape-face` and `watch-shape-wave` leave the
+  catalog.
+- `watch-face`, `watch-imprint`, `watch-contour`, `watch-membrane`, `watch-lens`, `watch-dome`,
+  `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android` and
+  `watch-sentinel` leave the catalog until they are redesigned from their Apple Watch originals.
+  A redesigned face returns under its original id.
+- The catalog lists 27 designs. Numeric catalog codes are positions in the installed catalog, so
+  the codes after `eclipse` (3) change; ids do not.
+
+### Added
+
+- Retired ids resolve instead of failing. `AvatarStyle::resolve(id)` returns the active design,
+  a retired id's replacement, or `AvatarStyle::DEFAULT` (`halo`) for a retired id without one
+  and for any unknown id. `AvatarStyle::retired(id)` and `RETIRED` describe each retired id
+  (version, decision date, reason, replacement).
+- `catalog.json` gains `default` and a `retired` list with the same records.
+- C/WebAssembly exports `avatar_default_style`, `avatar_retired_count`,
+  `avatar_retired_field_ptr` and `avatar_retired_field_len` (ABI 1, additive).
+- Python `retired()` and `resolve_style(id)`. `Renderer.render` and `render_descriptor` draw a
+  retired or unknown id as its resolved design.
+
+### Changed
+
+- `watch-rings` moves each of its six rings with its own part of the voice. With measured
+  `bands`, ring 1 follows the lowest bands and ring 6 the highest; each ring tilts, swells and
+  brightens with its band, pushing out while speaking and drawing in while listening. With a
+  level only, each ring follows the level through its own rhythm, so the rings still move one
+  by one.
+- Thinking and working are distinct animations in every design. Thinking draws inward and moves
+  slowly; working reaches outward and moves fast. Updated designs: `eclipse`, `rover`,
+  `watch-halo`, `watch-vortex`, `watch-nebula`, `watch-rings`, `watch-liquid`, `watch-galaxy`,
+  `watch-synapse`, `watch-accretion`, `watch-rover` and `watch-spark`.
+- The JSON descriptor accepts any style id of 1 to 64 bytes and draws it through
+  `AvatarStyle::resolve`. Python `validate_descriptor(..., styles=...)` still checks an id
+  against a set you pass.
 
 ### Fixed
 
-- The `iphone-weave` listening mesh expands with microphone energy. Its geometry
-  previously ignored the level while the listening globe was selected.
+- The `iphone-weave` listening mesh expands with microphone energy. Its geometry previously
+  ignored the level while the listening globe was selected.
+- Artifact provenance (`artifacts/provenance.json`) records the crate version from
+  `Cargo.toml`.
+
+### Migration
+
+- Persist ids, never catalog codes. Look codes up from the installed catalog.
+- A stored retired id renders its replacement: `eye` draws `watch-eye`; `watch-lens`,
+  `watch-dome`, `watch-valet`, `watch-retro`, `watch-deco`, `watch-cruiser`, `watch-android`
+  and `watch-sentinel` draw `watch-hover`; `watch-shape-wave` draws `watch-wave`. The others
+  draw `halo`. To offer a new choice, compare the stored id with the retired list.
+- Hosts that resolve a style from the catalog themselves should apply the retired list
+  (`avatar_retired_*` or `catalog.json`) before treating an id as unknown.
 
 ## [0.1.1] - 2026-11-03
 

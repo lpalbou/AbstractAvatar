@@ -4,7 +4,7 @@ description: Render and integrate AbstractAvatar procedural characters using its
 license: MIT
 compatibility: Rust crate `abstractavatar` on crates.io (Rust 1.87+); Python 3.10+ package `abstractavatar` on PyPI. Native wheels are platform-specific. Rendering is offline.
 metadata:
-  package-version: 0.1.1
+  package-version: 0.2.0
 ---
 
 # Use AbstractAvatar
@@ -19,7 +19,7 @@ With Python 3.10+:
 ```sh
 python -m pip install abstractavatar
 python -m abstractavatar catalog
-python -c 'import abstractavatar; print(abstractavatar.__version__); assert len(abstractavatar.catalog()) >= 44'
+python -c 'import abstractavatar; print(abstractavatar.__version__); assert len(abstractavatar.catalog()) >= 27'
 ```
 
 Wheels for Linux x86_64 and aarch64 (manylinux), macOS arm64 and x86_64, and Windows x86_64 bundle the native library; other platforms build it from the source
@@ -32,7 +32,9 @@ WebAssembly exports, and `json` adds the versioned descriptor.
 
 ## Working model
 
-- Style keys identify designs; store keys, not display names or numeric catalog codes.
+- Style keys identify designs; store keys, not display names or numeric catalog codes (codes
+  shift when a design is retired). A retired or unknown key still renders: its replacement, or
+  `halo`. `retired()` lists retired keys; `resolve_style(key)` names what will draw.
 - States are `ready`, `thinking`, `working`, `listening`, `speaking`, `waiting`, `error`.
 - Inputs are explicit. Time is finite elapsed seconds, level is 0..1, gaze is two values in -1..1.
 - Gaze moves eyes only: catalog `gaze` is `eyes` (pupils/irises/eye lamps shift a few percent while
@@ -85,13 +87,14 @@ descriptor = {
 ```
 
 Use `renderer.render_descriptor(descriptor)` while the renderer is open. Descriptors are inert
-parameters, not code or scene plug-ins. Unknown fields/styles/versions and invalid numbers are
-errors. Never let a descriptor choose a native library, URL or WebAssembly module.
+parameters, not code or scene plug-ins. Unknown fields/versions and invalid numbers are errors;
+an unknown or retired style draws its resolved design. Never let a descriptor choose a native library, URL or WebAssembly module.
 
 ## Diagnose failures
 
 - Missing library: install/build the package for this platform; do not silently substitute artwork.
-- Unknown style: enumerate `catalog()` and preserve the stored key for an explicit recovery choice.
+- Stored style draws something else: it is retired or unknown. Check `retired()`, keep the
+  stored key, and offer an explicit new choice from `catalog()`.
 - Capacity refusal: close disposed renderers and lazily create visible gallery views.
 - Corrupt image: verify RGBA ordering, dimensions and stride.
 - Unnecessary CPU: stop host clocks while hidden and show a static frame for reduced motion.

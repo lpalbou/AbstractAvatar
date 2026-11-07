@@ -15,9 +15,10 @@ the picture locally.
 
 ![Procedural avatar catalog](docs/media/catalog.png)
 
-**What's new in 0.1.1:** gaze moves the eyes only. Each catalog design declares a `gaze`
-component (`"eyes"` or `"none"`); a gaze input shifts only the eyes of `eyes` designs, and every
-other design draws the same frame with or without it. See the [changelog](CHANGELOG.md#011---2026-11-03).
+**What's new in 0.2.0:** the catalog keeps 27 designs; 17 are retired, and a stored retired or
+unknown id still renders (its replacement, or `halo`). `watch-rings` moves each ring with its own
+voice band, and thinking and working are distinct animations in every design. See the
+[changelog](CHANGELOG.md#020---unreleased-date-to-set-at-release).
 
 ## Start with Rust
 
@@ -63,8 +64,9 @@ Store catalog style identifiers, rather than numeric indices. Supply time explic
 animation while hidden, and use a static frame when reduced motion is enabled. Platform adapters
 do not need their own geometry implementations.
 
-The catalog includes shaded characters, particle orbs, forms, portraits, machines, nature scenes
-and a woven orb. [Catalog guidance](docs/catalog.md) explains source variants and stable keys.
+The catalog includes shaded characters, particle orbs, forms, machines, cosmic and nature scenes
+and a woven orb. [Catalog guidance](docs/catalog.md) explains stable keys, retired keys and the
+design guide.
 
 ## Documentation
 
