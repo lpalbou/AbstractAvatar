@@ -160,10 +160,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
-        assert_eq!(pixels("future"), pixels("halo"));
-        assert_eq!(pixels("watch-face"), pixels("halo"));
+        assert_eq!(pixels("future"), pixels("watch-halo"));
+        assert_eq!(pixels("watch-face"), pixels("watch-halo"));
         assert_eq!(pixels("watch-lens"), pixels("watch-hover"));
-        assert_eq!(pixels("eye"), pixels("watch-eye"));
+        assert_eq!(pixels("eye"), pixels("watch-well"));
         assert!(
             pixels("watch-face").iter().any(|p| p[3] > 0),
             "fallback is never blank"

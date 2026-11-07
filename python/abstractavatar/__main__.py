@@ -21,7 +21,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("catalog", help="Print the native style catalog as JSON")
     render = commands.add_parser("render", help="Render an RGBA PNG frame")
-    render.add_argument("--style", default="halo")
+    render.add_argument("--style", default="watch-halo")
     render.add_argument("--state", default="ready")
     render.add_argument("--time", type=float, default=0.0)
     render.add_argument("--level", type=float, default=0.0)

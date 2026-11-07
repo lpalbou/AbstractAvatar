@@ -5,9 +5,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* ABI1. Keys are durable; style indices are resolved from this catalog at runtime and change
- * when a design is retired. Fields0..5: key,name,description,watch reference,family,
- * gaze("eyes"|"none"). String pointers static.
+/* ABI1.1 (avatar_abi_minor; 1.1 only adds). Keys are durable; style indices are resolved
+ * from this catalog at runtime and change when a design is retired. Fields0..6: key,name,
+ * description,watch reference,family,gaze("eyes"|"none"),status("ready"|"experimental").
+ * String pointers static. Offer only ready designs (avatar_ready_*) in pickers and defaults;
+ * an experimental design still draws when its key is asked for.
  * Retired keys stay reserved: draw a retired key's replacement field, or when it is empty
  * (and for any unknown key) the avatar_default_style() code. Retired fields0..4:
  * key,replacement key(""=default),retired in version,decision date,reason.
@@ -21,7 +23,11 @@ extern "C" {
  * Native hosts serialize palette/draw and concurrent borrowed-pointer access.
  */
 uint32_t avatar_abi_version(void);
+uint32_t avatar_abi_minor(void);
 uint32_t avatar_style_count(void);
+uint32_t avatar_ready_count(void);
+/* Catalog code of the index-th ready design (catalog order); UINT32_MAX when out of range. */
+uint32_t avatar_ready_style(uint32_t index);
 const uint8_t *avatar_style_field_ptr(uint32_t style,uint32_t field);
 size_t avatar_style_field_len(uint32_t style,uint32_t field);
 uint32_t avatar_default_style(void);

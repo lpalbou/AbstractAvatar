@@ -72,7 +72,7 @@ def main():
         binary = ROOT / "target" / "wasm32-unknown-unknown" / "release" / "abstractavatar.wasm"
         data = binary.read_bytes()
         (output / "avatar_core.wasm").write_bytes(data)
-        metadata = {"abi": 1, "source": "abstractavatar", "crate_version": crate_version(), "source_sha256": source_hash(), "wasm_sha256": hashlib.sha256(data).hexdigest(), "build": "python3 abstractavatar/scripts/build_artifacts.py", "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip()}
+        metadata = {"abi": 1, "abi_minor": 1, "source": "abstractavatar", "crate_version": crate_version(), "source_sha256": source_hash(), "wasm_sha256": hashlib.sha256(data).hexdigest(), "build": "python3 abstractavatar/scripts/build_artifacts.py", "rustc": subprocess.check_output(["rustc", "--version"], text=True).strip()}
         (output / "provenance.json").write_text(json.dumps(metadata, indent=2) + "\n")
         if args.uic_dir:
             args.uic_dir.mkdir(parents=True, exist_ok=True)

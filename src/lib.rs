@@ -51,7 +51,7 @@ impl AvatarPose {
     }
 }
 mod catalog;
-pub use catalog::{AvatarStyle, RetiredStyle, RETIRED};
+pub use catalog::{AvatarStyle, DesignStatus, RetiredStyle, RETIRED};
 #[cfg(feature = "json")]
 pub mod descriptor;
 mod raster;
@@ -1050,6 +1050,6 @@ mod tests {
         assert_eq!(AvatarStyle::Rover.watch_code(), "Q");
         assert_eq!(AvatarStyle::from_id("future"), None);
         assert_eq!(AvatarStyle::from_id("eye"), None);
-        assert_eq!(AvatarStyle::resolve("eye"), AvatarStyle::WatchEye);
+        assert_eq!(AvatarStyle::resolve("eye"), AvatarStyle::WatchWell);
     }
 }

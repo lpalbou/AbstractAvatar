@@ -2,15 +2,39 @@
 //! this build's catalog and changes when a design is retired. A retired or unknown id
 //! resolves to a documented design through [`AvatarStyle::resolve`], so a stored identity
 //! always renders.
+//!
+//! Every active design carries a [`DesignStatus`]. Only [`DesignStatus::Ready`] designs are
+//! offered to users ([`AvatarStyle::ready`]); [`DesignStatus::Experimental`] designs still
+//! render when a host asks for them by id, but pickers and defaults never surface them.
+
+/// Whether an active design may be offered to users.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DesignStatus {
+    /// Finished: hosts may list it in pickers and use it as a default.
+    Ready,
+    /// Not ready: it renders when asked for by id, but hosts must not offer it.
+    Experimental,
+}
+impl DesignStatus {
+    /// The catalog value: `"ready"` or `"experimental"`.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Experimental => "experimental",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AvatarStyle {
-    #[default]
     Halo,
     Hover,
     Vortex,
     Eclipse,
     Rover,
+    #[default]
     WatchHalo,
     WatchVortex,
     WatchNebula,
@@ -64,6 +88,31 @@ impl AvatarStyle {
         Self::WatchOcean,
         Self::IphoneWeave,
     ];
+    /// Every active design in catalog order, ready and experimental. Use [`Self::ready`]
+    /// for anything a user chooses from.
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::ALL.into_iter()
+    }
+    /// The designs a host may offer (pickers, lists, defaults), in catalog order.
+    pub fn ready() -> impl Iterator<Item = Self> {
+        Self::all().filter(|s| s.is_ready())
+    }
+    /// Whether this design is offered to users or only reachable by id.
+    pub fn status(self) -> DesignStatus {
+        match self {
+            Self::IphoneWeave
+            | Self::WatchHover
+            | Self::WatchMurmuration
+            | Self::WatchWell
+            | Self::WatchWave
+            | Self::WatchRings
+            | Self::WatchHalo => DesignStatus::Ready,
+            _ => DesignStatus::Experimental,
+        }
+    }
+    pub fn is_ready(self) -> bool {
+        self.status() == DesignStatus::Ready
+    }
     pub fn from_code(code: u32) -> Option<Self> {
         Self::ALL.get(code as usize).copied()
     }
@@ -71,10 +120,10 @@ impl AvatarStyle {
         Self::ALL.iter().position(|v| *v == self).unwrap() as u32
     }
     /// The design an unknown id resolves to, and the replacement for retired designs that
-    /// name none: the shaded [`Self::Halo`] orb.
-    pub const DEFAULT: Self = Self::Halo;
-    /// Look up an active design. Retired and unknown ids return `None`; use [`Self::resolve`]
-    /// to render a stored identity.
+    /// name none: the ready [`Self::WatchHalo`] orb.
+    pub const DEFAULT: Self = Self::WatchHalo;
+    /// Look up an active design, ready or experimental. Retired and unknown ids return
+    /// `None`; use [`Self::resolve`] to render a stored identity.
     pub fn from_id(id: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|s| s.id() == id)
     }
@@ -134,11 +183,13 @@ impl AvatarStyle {
                 | Self::WatchSpark
         )
     }
-    /// Catalog field by ABI index: 0..4 as in [`Self::fields`], then 5 = [`Self::gaze`].
+    /// Catalog field by ABI index: 0..4 as in [`Self::fields`], 5 = [`Self::gaze`],
+    /// 6 = [`Self::status`].
     #[cfg(feature = "ffi")]
     pub(crate) fn field(self, index: u32) -> Option<&'static str> {
         match index {
             5 => Some(self.gaze()),
+            6 => Some(self.status().id()),
             _ => self.fields().get(index as usize).copied(),
         }
     }
@@ -205,7 +256,7 @@ const fn retired(
 }
 /// Every retired id, in former catalog order. `catalog.json` carries the same list.
 pub const RETIRED: [RetiredStyle; 17] = [
-    retired("eye", REMOVED, Some(AvatarStyle::WatchEye)),
+    retired("eye", REMOVED, Some(AvatarStyle::WatchWell)),
     retired("watch-drop", REMOVED, None),
     retired("watch-face", REDESIGN, None),
     retired("watch-imprint", REDESIGN, None),
@@ -242,12 +293,57 @@ mod tests {
         assert_eq!(ids.len(), RETIRED.len());
         assert_eq!(AvatarStyle::ALL.len() + RETIRED.len(), 44);
     }
+    #[test]
+    fn exactly_the_seven_rated_designs_are_ready_and_every_fallback_is_ready() {
+        let mut ready: Vec<_> = AvatarStyle::ready().map(|s| s.id()).collect();
+        ready.sort();
+        assert_eq!(
+            ready,
+            [
+                "iphone-weave",
+                "watch-halo",
+                "watch-hover",
+                "watch-murmuration",
+                "watch-rings",
+                "watch-wave",
+                "watch-well",
+            ]
+        );
+        assert_eq!(AvatarStyle::all().count(), 27);
+        assert_eq!(
+            AvatarStyle::all()
+                .filter(|s| s.status() == DesignStatus::Experimental)
+                .count(),
+            20
+        );
+        assert!(AvatarStyle::ready().all(|s| AvatarStyle::all().any(|a| a == s)));
+        assert!(AvatarStyle::DEFAULT.is_ready());
+        assert_eq!(AvatarStyle::default(), AvatarStyle::DEFAULT);
+        for r in RETIRED {
+            let target = AvatarStyle::resolve(r.id);
+            assert!(target.is_ready(), "{} falls back to {}", r.id, target.id());
+        }
+        assert_eq!(AvatarStyle::resolve("eye"), AvatarStyle::WatchWell);
+        assert_eq!(
+            AvatarStyle::resolve("watch-shape-wave"),
+            AvatarStyle::WatchWave
+        );
+        assert_eq!(AvatarStyle::resolve("watch-lens"), AvatarStyle::WatchHover);
+        // Experimental designs stay reachable by id: nothing refuses them.
+        assert_eq!(AvatarStyle::resolve("halo"), AvatarStyle::Halo);
+        assert_eq!(
+            AvatarStyle::from_id("watch-eye"),
+            Some(AvatarStyle::WatchEye)
+        );
+    }
     #[cfg(feature = "json")]
     #[test]
     fn catalog_json_matches_the_compiled_catalog_and_retired_list() {
         let shipped: serde_json::Value =
             serde_json::from_str(include_str!("../catalog.json")).unwrap();
         assert_eq!(shipped["default"], AvatarStyle::DEFAULT.id());
+        assert_eq!(shipped["schema_version"], 1);
+        assert_eq!(shipped["schema_minor"], 1);
         let designs = shipped["designs"].as_array().unwrap();
         assert_eq!(designs.len(), AvatarStyle::ALL.len());
         for (row, style) in designs.iter().zip(AvatarStyle::ALL) {
@@ -255,6 +351,7 @@ mod tests {
             assert_eq!(row["id"], style.id());
             assert_eq!(row["name"], style.label());
             assert_eq!(row["gaze"], style.gaze());
+            assert_eq!(row["status"], style.status().id());
         }
         let retired = shipped["retired"].as_array().unwrap();
         assert_eq!(retired.len(), RETIRED.len());
@@ -278,7 +375,7 @@ mod tests {
     fn unknown_ids_fall_back_to_the_documented_default() {
         assert_eq!(AvatarStyle::DEFAULT, AvatarStyle::default());
         for id in ["", "future", "WATCH-HALO", "watch-face ", "\u{0}"] {
-            assert_eq!(AvatarStyle::resolve(id), AvatarStyle::Halo, "{id:?}");
+            assert_eq!(AvatarStyle::resolve(id), AvatarStyle::WatchHalo, "{id:?}");
         }
         for style in AvatarStyle::ALL {
             assert_eq!(AvatarStyle::resolve(style.id()), style);

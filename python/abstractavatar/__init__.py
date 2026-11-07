@@ -10,8 +10,9 @@ import threading
 from typing import Any
 
 __version__ = "0.2.0"
-__all__ = ["Renderer", "catalog", "retired", "resolve_style", "validate_descriptor", "__version__"]
+__all__ = ["Renderer", "catalog", "ready", "retired", "resolve_style", "validate_descriptor", "__version__"]
 _STATES = ("ready", "thinking", "working", "listening", "speaking", "waiting", "error")
+_STATUSES = ("ready", "experimental")
 _LIBRARIES: dict[str, Any] = {}
 _LIBRARY_LOCK = threading.RLock()
 _NAMES = {"darwin": "libabstractavatar.dylib", "win32": "abstractavatar.dll"}
@@ -28,7 +29,10 @@ def _library(library_path: str | Path | None = None):
         lib = C.CDLL(key)
         signatures = {
             "avatar_abi_version": ([], C.c_uint32),
+            "avatar_abi_minor": ([], C.c_uint32),
             "avatar_style_count": ([], C.c_uint32),
+            "avatar_ready_count": ([], C.c_uint32),
+            "avatar_ready_style": ([C.c_uint32], C.c_uint32),
             "avatar_style_field_ptr": ([C.c_uint32] * 2, C.c_void_p),
             "avatar_style_field_len": ([C.c_uint32] * 2, C.c_size_t),
             "avatar_default_style": ([], C.c_uint32),
@@ -50,14 +54,16 @@ def _library(library_path: str | Path | None = None):
                 fn.argtypes, fn.restype = args, result
         except AttributeError as exc:
             raise RuntimeError("AbstractAvatar native library is missing a required ABI function") from exc
-        if lib.avatar_abi_version() != 1:
+        if lib.avatar_abi_version() != 1 or lib.avatar_abi_minor() < 1:
             raise RuntimeError("Unsupported AbstractAvatar native ABI")
         _LIBRARIES[key] = lib
         return lib
 
 
 def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
-    """Return runtime catalog records. Persist ``id`` rather than numeric ``code``."""
+    """Return every active design, ready and experimental. Persist ``id`` rather than numeric
+    ``code``. Offer users only ``status == "ready"`` records (see :func:`ready`); an
+    experimental design still renders when asked for by id."""
     lib = _library(library_path)
     count = int(lib.avatar_style_count())
     if not 1 <= count <= 256:
@@ -66,15 +72,36 @@ def catalog(library_path: str | Path | None = None) -> list[dict[str, Any]]:
     seen: set[str] = set()
     for code in range(count):
         record: dict[str, Any] = {"code": code}
-        for field, name in enumerate(("id", "name", "description", "watch_code", "family", "gaze")):
+        for field, name in enumerate(("id", "name", "description", "watch_code", "family", "gaze", "status")):
             record[name] = _text(lib, "avatar_style_field", code, field)
         if not record["id"] or record["id"] in seen:
             raise RuntimeError("Invalid or duplicated AbstractAvatar style identifier")
         if record["gaze"] not in ("eyes", "none"):
             raise RuntimeError("Invalid AbstractAvatar gaze component")
+        if record["status"] not in _STATUSES:
+            raise RuntimeError("Invalid AbstractAvatar design status")
         record["reference"] = record["watch_code"]
         seen.add(record["id"])
         out.append(record)
+    return out
+
+
+def ready(library_path: str | Path | None = None) -> list[dict[str, Any]]:
+    """Return the ready designs, in catalog order: the only ones to offer in a picker, a list
+    or as a default."""
+    lib = _library(library_path)
+    records = catalog(library_path)
+    count = int(lib.avatar_ready_count())
+    if not 1 <= count <= len(records):
+        raise RuntimeError("AbstractAvatar ready list exceeds the supported bounds")
+    out = []
+    for index in range(count):
+        code = int(lib.avatar_ready_style(index))
+        if code >= len(records) or records[code]["status"] != "ready":
+            raise RuntimeError("AbstractAvatar ready list disagrees with the catalog status")
+        out.append(records[code])
+    if len(out) != sum(record["status"] == "ready" for record in records):
+        raise RuntimeError("AbstractAvatar ready list disagrees with the catalog status")
     return out
 
 
@@ -103,7 +130,7 @@ def retired(library_path: str | Path | None = None) -> list[dict[str, Any]]:
 
 def resolve_style(style: str, library_path: str | Path | None = None) -> str:
     """Return the active design id to draw for a stored id: the id itself when it is active,
-    a retired id's replacement, otherwise the default design (``halo``). Never fails for a
+    a retired id's replacement, otherwise the default design (``watch-halo``). Never fails for a
     string, so a stored identity that names a removed avatar still renders."""
     if not isinstance(style, str):
         raise ValueError("Avatar style must be a string")
@@ -222,7 +249,7 @@ class Renderer:
                     rgb = tuple(int(a + (b - a) * amount + .5) for a, b in zip(left, right))
                     self._check(self._library.avatar_set_shade(self._handle, material, shade, int.from_bytes(bytes((*rgb, 255)), "big")))
 
-    def render(self, style="halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True, bands=None) -> bytes:
+    def render(self, style="watch-halo", state="ready", level=0.0, time=0.0, gaze=(0, 0), transparent=True, bands=None) -> bytes:
         """Return owned, tightly packed, straight-alpha RGBA8 bytes.
 
         A retired or unknown ``style`` renders its replacement or the default design

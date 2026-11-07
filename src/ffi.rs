@@ -33,9 +33,28 @@ static FRAMES: LazyLock<Mutex<Registry>> = LazyLock::new(|| {
 pub extern "C" fn avatar_abi_version() -> u32 {
     1
 }
+/// ABI 1 minor revision. 1 adds catalog field 6 (status) and the `avatar_ready_*` list;
+/// every ABI 1.0 export is unchanged.
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_abi_minor() -> u32 {
+    1
+}
 #[unsafe(no_mangle)]
 pub extern "C" fn avatar_style_count() -> u32 {
     AvatarStyle::ALL.len() as u32
+}
+/// How many designs are ready, the only ones a host may offer in a picker or as a default.
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_ready_count() -> u32 {
+    AvatarStyle::ready().count() as u32
+}
+/// The catalog code of the `index`th ready design, in catalog order, or `u32::MAX` when
+/// `index` is out of range. Read its key with field 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn avatar_ready_style(index: u32) -> u32 {
+    AvatarStyle::ready()
+        .nth(index as usize)
+        .map_or(u32::MAX, |s| s.code())
 }
 #[unsafe(no_mangle)]
 pub extern "C" fn avatar_style_field_ptr(style: u32, field: u32) -> *const u8 {
@@ -400,9 +419,25 @@ mod tests {
         assert_eq!(avatar_destroy(h), 0);
         assert_eq!(avatar_destroy(h), -1);
         assert_eq!(avatar_pixels_len(h), 0);
-        assert_eq!(avatar_default_style(), 0);
+        assert_eq!(avatar_default_style(), AvatarStyle::WatchHalo.code());
+        assert_eq!((avatar_abi_version(), avatar_abi_minor()), (1, 1));
+        assert_eq!(avatar_ready_count(), 7);
+        let ready: Vec<_> = (0..avatar_ready_count())
+            .map(|i| AvatarStyle::from_code(avatar_ready_style(i)).unwrap())
+            .collect();
+        assert_eq!(ready, AvatarStyle::ready().collect::<Vec<_>>());
+        assert_eq!(avatar_ready_style(7), u32::MAX);
+        for code in 0..avatar_style_count() {
+            let style = AvatarStyle::from_code(code).unwrap();
+            assert_eq!(avatar_style_field_len(code, 6), style.status().id().len());
+            assert_eq!(
+                avatar_style_field_ptr(code, 6),
+                style.status().id().as_ptr()
+            );
+        }
+        assert!(avatar_style_field_ptr(0, 7).is_null());
         assert_eq!(avatar_retired_count(), 17);
-        assert_eq!(avatar_retired_field_len(0, 1), "watch-eye".len());
+        assert_eq!(avatar_retired_field_len(0, 1), "watch-well".len());
         assert_eq!(avatar_retired_field_len(1, 1), 0);
         assert!(
             avatar_retired_field_ptr(17, 0).is_null() && avatar_retired_field_ptr(0, 5).is_null()

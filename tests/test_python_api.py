@@ -5,7 +5,9 @@ import math
 from pathlib import Path
 import unittest
 
-from abstractavatar import Renderer, catalog, resolve_style, retired, validate_descriptor
+from abstractavatar import Renderer, catalog, ready, resolve_style, retired, validate_descriptor
+
+READY = {"iphone-weave", "watch-hover", "watch-murmuration", "watch-well", "watch-wave", "watch-rings", "watch-halo"}
 
 
 class DescriptorTests(unittest.TestCase):
@@ -34,6 +36,22 @@ class NativeTests(unittest.TestCase):
         shipped = json.loads((Path(__file__).resolve().parents[1] / "catalog.json").read_text())
         self.assertEqual([(d["code"], d["id"]) for d in designs], [(d["code"], d["id"]) for d in shipped["designs"]])
         self.assertEqual({r["id"]: r["replacement"] for r in retired()}, {r["id"]: r["replacement"] for r in shipped["retired"]})
+        self.assertEqual({d["id"]: d["status"] for d in designs}, {d["id"]: d["status"] for d in shipped["designs"]})
+        self.assertEqual((shipped["schema_version"], shipped["schema_minor"], shipped["default"]), (1, 1, "watch-halo"))
+
+    def test_only_the_seven_rated_designs_are_ready_and_every_fallback_is_ready(self):
+        designs = catalog()
+        self.assertEqual({d["id"] for d in designs if d["status"] == "ready"}, READY)
+        self.assertEqual(sum(d["status"] == "experimental" for d in designs), 20)
+        self.assertEqual(ready(), [d for d in designs if d["status"] == "ready"])
+        self.assertEqual(resolve_style("future"), "watch-halo")
+        self.assertTrue(all(resolve_style(r["id"]) in READY for r in retired()))
+        self.assertEqual({resolve_style(k) for k in ["eye", "watch-shape-wave", "watch-lens"]}, {"watch-well", "watch-wave", "watch-hover"})
+        with Renderer(48, 48) as renderer:
+            # Experimental designs are hidden from pickers, not refused.
+            self.assertEqual(resolve_style("halo"), "halo")
+            self.assertNotEqual(renderer.render("halo", "speaking", .6, 1.1), renderer.render("watch-halo", "speaking", .6, 1.1))
+            self.assertEqual(renderer.render(), renderer.render("watch-halo"))
 
     def test_retired_ids_are_not_active_and_still_render_their_fallback(self):
         active = {d["id"] for d in catalog()}
@@ -43,13 +61,13 @@ class NativeTests(unittest.TestCase):
         self.assertTrue({"eye", "watch-face", "watch-lens", "watch-shape-kitty"} <= {r["id"] for r in gone})
         with Renderer(48, 48) as renderer:
             for record in gone:
-                expected = record["replacement"] or "halo"
+                expected = record["replacement"] or "watch-halo"
                 self.assertIn(expected, active)
                 self.assertEqual(resolve_style(record["id"]), expected)
                 self.assertEqual(renderer.render(record["id"], "speaking", .6, 1.1), renderer.render(expected, "speaking", .6, 1.1), record["id"])
-            self.assertEqual(resolve_style("future"), "halo")
+            self.assertEqual(resolve_style("future"), "watch-halo")
             frame = renderer.render("future", "ready", .6, 1.1)
-            self.assertEqual(frame, renderer.render("halo", "ready", .6, 1.1))
+            self.assertEqual(frame, renderer.render("watch-halo", "ready", .6, 1.1))
             self.assertGreater(sum(frame[3::4]), 1000)
             self.assertEqual(renderer.render_descriptor({"schema_version": 1, "style": "watch-dome", "state": "ready", "time": 1.1, "level": .6}), renderer.render("watch-hover", "ready", .6, 1.1))
 

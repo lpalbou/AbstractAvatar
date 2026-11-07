@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
-  "default": "halo",
+  "schema_minor": 1,
+  "default": "watch-halo",
   "designs": [
     {
       "code": 0,
@@ -10,6 +11,7 @@
       "reference": "A",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstracttui/src/widgets/avatar.rs",
       "kind": "shaded"
     },
@@ -21,6 +23,7 @@
       "reference": "HV",
       "family": "machines",
       "gaze": "eyes",
+      "status": "experimental",
       "source": "abstracttui/src/widgets/avatar.rs",
       "kind": "shaded"
     },
@@ -32,6 +35,7 @@
       "reference": "B",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstracttui/src/widgets/avatar.rs",
       "kind": "shaded"
     },
@@ -43,6 +47,7 @@
       "reference": "U",
       "family": "forms",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstracttui/src/widgets/avatar.rs",
       "kind": "shaded"
     },
@@ -54,6 +59,7 @@
       "reference": "Q",
       "family": "machines",
       "gaze": "eyes",
+      "status": "experimental",
       "source": "abstracttui/src/widgets/avatar.rs",
       "kind": "shaded"
     },
@@ -65,6 +71,7 @@
       "reference": "A",
       "family": "orbs",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
       "kind": "procedural-scene"
     },
@@ -76,6 +83,7 @@
       "reference": "B",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
       "kind": "procedural-scene"
     },
@@ -87,6 +95,7 @@
       "reference": "C",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
       "kind": "procedural-scene"
     },
@@ -98,6 +107,7 @@
       "reference": "D",
       "family": "orbs",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbScenes.swift",
       "kind": "procedural-scene"
     },
@@ -109,6 +119,7 @@
       "reference": "E",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
       "kind": "procedural-scene"
     },
@@ -120,6 +131,7 @@
       "reference": "F",
       "family": "orbs",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/Orb.swift",
       "kind": "procedural-scene"
     },
@@ -131,6 +143,7 @@
       "reference": "R",
       "family": "forms",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
       "kind": "procedural-scene"
     },
@@ -142,6 +155,7 @@
       "reference": "S",
       "family": "forms",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
       "kind": "procedural-scene"
     },
@@ -153,6 +167,7 @@
       "reference": "U",
       "family": "forms",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
       "kind": "procedural-scene"
     },
@@ -164,6 +179,7 @@
       "reference": "V",
       "family": "forms",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
       "kind": "procedural-scene"
     },
@@ -175,6 +191,7 @@
       "reference": "X",
       "family": "forms",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbConcepts.swift",
       "kind": "procedural-scene"
     },
@@ -186,6 +203,7 @@
       "reference": "T",
       "family": "cosmos",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
       "kind": "procedural-scene"
     },
@@ -197,6 +215,7 @@
       "reference": "Y",
       "family": "cosmos",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
       "kind": "procedural-scene"
     },
@@ -208,6 +227,7 @@
       "reference": "Z",
       "family": "cosmos",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbCosmos.swift",
       "kind": "procedural-scene"
     },
@@ -219,6 +239,7 @@
       "reference": "AU",
       "family": "nature",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbNature.swift",
       "kind": "procedural-scene"
     },
@@ -230,6 +251,7 @@
       "reference": "MU",
       "family": "nature",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbNature.swift",
       "kind": "procedural-scene"
     },
@@ -241,6 +263,7 @@
       "reference": "K",
       "family": "faces",
       "gaze": "eyes",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbAvatars.swift",
       "kind": "procedural-scene"
     },
@@ -252,6 +275,7 @@
       "reference": "Q",
       "family": "machines",
       "gaze": "eyes",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbRobots.swift",
       "kind": "procedural-scene"
     },
@@ -263,6 +287,7 @@
       "reference": "HV",
       "family": "machines",
       "gaze": "eyes",
+      "status": "ready",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
       "kind": "procedural-scene"
     },
@@ -274,6 +299,7 @@
       "reference": "SP",
       "family": "machines",
       "gaze": "eyes",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbMachines.swift",
       "kind": "procedural-scene"
     },
@@ -285,6 +311,7 @@
       "reference": "H",
       "family": "nature",
       "gaze": "none",
+      "status": "experimental",
       "source": "abstractassistant/watch/apple/Sources/App/Shared/OrbScenes.swift",
       "kind": "procedural-scene"
     },
@@ -296,6 +323,7 @@
       "reference": "",
       "family": "forms",
       "gaze": "none",
+      "status": "ready",
       "source": "abstractassistant/phone/iphone/Sources/App/OrbWeave.swift",
       "kind": "procedural-scene"
     }
@@ -308,7 +336,7 @@
       "retired_in": "0.2.0",
       "date": "2026-11-07",
       "reason": "removed from the catalog",
-      "replacement": "watch-eye"
+      "replacement": "watch-well"
     },
     {
       "id": "watch-drop",
