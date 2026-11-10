@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0] - unreleased, date to set at release
+## [0.2.0] - 2026-11-10
 
 This release changes the catalog: 17 designs leave it, and only seven of the 27 that remain are
 ready to offer users. Stored ids keep rendering (see Migration).

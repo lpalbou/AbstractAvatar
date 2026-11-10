@@ -46,7 +46,7 @@ unknown id still renders (its replacement, or `watch-halo`). Seven designs are r
 to users; the other 20 are experimental: they render when asked for by key but pickers do not
 list them. The picture above shows the ready designs. `watch-rings` moves each ring with its own
 voice band, and thinking and working are distinct animations in every design. See the
-[changelog](CHANGELOG.md#020---unreleased-date-to-set-at-release).
+[changelog](CHANGELOG.md#020---2026-11-10).
 
 ## Start with Rust
 
@@ -830,7 +830,7 @@ SOFTWARE.
 
 # Changelog
 
-## [0.2.0] - unreleased, date to set at release
+## [0.2.0] - 2026-11-10
 
 This release changes the catalog: 17 designs leave it, and only seven of the 27 that remain are
 ready to offer users. Stored ids keep rendering (see Migration).
